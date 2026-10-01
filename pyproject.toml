@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adk-ing"
+version = "0.1.0"
+description = "Ingeniería de Software Aumentada con IA — consumo del bucket gs://adk_ing con Google ADK"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "google-cloud-storage>=2.16",
+    "google-adk>=1.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+adk-ing = "adk_ing.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "agents"]

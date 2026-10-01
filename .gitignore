@@ -1,0 +1,30 @@
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+*.json.key
+*-key.json
+service-account*.json
+
+# Datos descargados del bucket
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+build/
+dist/
+
+# ADK
+.adk/
+*.db
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
