@@ -6,8 +6,9 @@
 *-key.json
 service-account*.json
 
-# Datos descargados del bucket
+# Datos descargados del bucket y resultados locales del orquestador
 data/
+salidas_hu/
 
 # Python
 __pycache__/

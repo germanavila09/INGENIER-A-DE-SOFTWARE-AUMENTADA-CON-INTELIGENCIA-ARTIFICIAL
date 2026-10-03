@@ -1,0 +1,2 @@
+# Instala el proyecto y sus dependencias (definidas en pyproject.toml)
+-e .[dev]

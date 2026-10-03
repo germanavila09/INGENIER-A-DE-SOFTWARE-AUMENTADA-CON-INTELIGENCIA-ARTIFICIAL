@@ -1,16 +1,27 @@
 # Ingeniería de Software Aumentada con Inteligencia Artificial
 
-Proyecto base que consume el bucket de Cloud Storage **`gs://adk_ing`** (proyecto GCP `servi-modelos-ia-dev`) y lo expone de dos formas:
+Proyecto base que consume el bucket de Cloud Storage **`gs://adk_ing`** (proyecto GCP `servi-modelos-ia-dev`) con [Google ADK](https://google.github.io/adk-docs/) y Gemini:
 
+- **`orquestador_hu`**: sistema **multiagente** que descubre proyectos en el bucket, analiza sus historias de usuario (INVEST, ambigüedades, impacto de arquitectura, casos de prueba), detecta cuándo se necesita una decisión humana (HITL), se detiene y continúa tras la aprobación, con máquina de estados persistida, versionado y auditoría completa. Arquitectura en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
+- **`agente_bucket`**: agente que busca, lee y responde preguntas sobre los documentos del bucket (PDF, Word, Excel, PowerPoint, CSV, texto), citando documento y página.
 - **`adk-ing`**: CLI y librería Python para listar, leer y sincronizar los objetos del bucket.
-- **`agente_bucket`**: agente de [Google ADK](https://google.github.io/adk-docs/) con Gemini que busca, lee y responde preguntas sobre los documentos ingestados en el bucket (PDF, Word, Excel, PowerPoint, CSV, texto), citando documento y página.
 
 ```
 .
-├── adk_web.py              # lanza ADK Web con el agente (python adk_web.py)
-├── agents/
-│   └── agente_bucket/      # agente ADK (root_agent) con herramientas sobre los documentos
-├── docs_ejemplo/           # documentos ficticios para probar (PDF, DOCX, XLSX, PPTX, MD, PDF escaneado)
+├── adk_web.py              # lanza ADK Web (python adk_web.py)
+├── agents/                 # apps que muestra ADK Web
+│   ├── orquestador_hu/     # sistema multiagente de historias de usuario (root_agent = orquestador)
+│   └── agente_bucket/      # agente de preguntas sobre documentos
+├── docs/ARQUITECTURA.md    # arquitectura multiagente, diagramas Mermaid, HITL, estados
+├── ejemplos/projects/      # proyectos de ejemplo: PRJ001 (dengue), PRJ002, proyecto sin project.yaml
+├── docs_ejemplo/           # documentos ficticios para agente_bucket
+├── src/hu_multiagent/      # código del sistema multiagente
+│   ├── agents/             # orchestrator, project_discovery, ingestion, story_analyst,
+│   │                       # architecture, qa, aggregator, hitl_evaluator (agent.py + prompt.py)
+│   ├── models/             # schemas Pydantic: proyecto, historia, contrato, HITL, estados
+│   ├── services/           # almacenamiento por proyecto, estado persistido, auditoría
+│   ├── tools/              # bucket, manifest/contexto, historias, herramientas HITL
+│   └── workflows/          # flujos ADK por proyecto e historia, motor, reportes
 ├── src/adk_ing/
 │   ├── config.py           # variables de entorno / .env
 │   ├── bucket.py           # BucketReader (bucket) y CarpetaLocal (pruebas)
@@ -63,6 +74,47 @@ for obj in reader.list(prefix="datos/"):
 texto = reader.read_text("documentos/guia.md")
 ```
 
+### Sistema multiagente de historias de usuario (`orquestador_hu`)
+
+**1. Proyectos en el bucket.** Cada proyecto es una carpeta bajo `HU_INPUT_URI` (por defecto `gs://adk_ing/projects/`), con `project.yaml` opcional y carpetas como `requirements/`, `user_stories/`, `architecture/`, `decisions/`, `technical/`, `tests/`. Para cargar los ejemplos:
+
+```bash
+gcloud storage cp -r ejemplos/projects gs://adk_ing/
+```
+
+Para probar sin el bucket, pon `HU_INPUT_URI=ejemplos/projects` en el `.env`.
+
+**2. ADK Web.** `python adk_web.py`, elige **orquestador_hu** y conversa:
+
+| Tú escribes | Qué pasa |
+|---|---|
+| «¿Qué proyectos hay?» | `descubrir_proyectos`: lista proyectos, si tienen `project.yaml`, estado y decisiones pendientes |
+| «Analiza PRJ001» | flujo completo: manifest → ingesta → contexto → por historia: analista → [arquitectura ‖ QA] → agregador → evaluador HITL |
+| «MODIFIED D-PRJ001-US-001-01: la incidencia es casos / población × 100.000 y la población viene de proyecciones DANE» | registra tu corrección y reanaliza la historia automáticamente |
+| «APPROVED D-PRJ001-US-003-01, migrar por lotes» | aprueba; se escribe la versión `_human_approved` |
+| «¿Por qué US-001 terminó así?» | `explicar_historia`: transiciones, revisiones por agente, HITL, decisiones y auditoría |
+
+Con los ejemplos, PRJ001 se detiene en tres historias: **US-001** por preguntas bloqueantes (fórmula de incidencia, fuente poblacional, definición de caso), **US-003** por migración de datos y retiro de un componente, y **US-004** por proponer cambios a una historia ya aprobada. **US-002** queda lista sin intervención. Las decisiones solo se registran si las escribes tú: el modelo no puede aprobar por su cuenta.
+
+**3. Resultados.** En `HU_RESULTS_URI` (por defecto la carpeta `salidas_hu/`, ignorada por git), dentro de `projects/<ID>/`: `generated/` (manifest, contexto, artefactos por historia y sus versiones, reportes), `state/project_state.json` y `audit/audit_log.jsonl`. Para escribirlos en GCP usa un bucket aparte, p. ej. `HU_RESULTS_URI=gs://adk_ing_resultados`.
+
+**Terminal:** `adk run agents/orquestador_hu`.
+
+**Cuenta de servicio con mínimo privilegio** (para Cloud Run o para probar localmente con impersonación):
+
+```bash
+PROJECT=servi-modelos-ia-dev
+SA=hu-agentes@$PROJECT.iam.gserviceaccount.com
+gcloud iam service-accounts create hu-agentes --project $PROJECT
+gcloud storage buckets add-iam-policy-binding gs://adk_ing --member=serviceAccount:$SA --role=roles/storage.objectViewer
+gcloud storage buckets create gs://adk_ing_resultados --project $PROJECT --location=us-central1 --uniform-bucket-level-access
+gcloud storage buckets add-iam-policy-binding gs://adk_ing_resultados --member=serviceAccount:$SA --role=roles/storage.objectUser
+gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$SA --role=roles/aiplatform.user
+gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$SA --role=roles/logging.logWriter
+# Probar localmente con esos permisos (requiere roles/iam.serviceAccountTokenCreator sobre la cuenta):
+gcloud auth application-default login --impersonate-service-account=$SA
+```
+
 ### ADK Web con el agente del bucket
 
 ```bash
@@ -111,7 +163,7 @@ Subir requiere `roles/storage.objectCreator`; el agente solo necesita lectura.
 pytest -q
 ```
 
-Las pruebas no requieren credenciales: usan los documentos de `docs_ejemplo/`, un cliente de GCS falso y un modelo simulado que recorre el flujo completo de ADK (buscar → responder citando la fuente). También corren en GitHub Actions en cada push.
+Las pruebas no requieren credenciales: usan los documentos de `docs_ejemplo/` y `ejemplos/projects/`, un cliente de GCS falso y modelos simulados que recorren los flujos reales de ADK. Para el orquestador cubren la política HITL, la máquina de estados, el flujo completo de PRJ001 (pausa, APPROVED, REJECTED, MODIFIED con reanálisis), el versionado, la auditoría, el aislamiento entre proyectos, los reintentos, los errores fatales, los límites y la guardia que impide decisiones no humanas. También corren en GitHub Actions en cada push.
 
 ## Variables de entorno
 
@@ -130,3 +182,12 @@ Las pruebas no requieren credenciales: usan los documentos de `docs_ejemplo/`, u
 | `DOCS_LOCAL_DIR` | *(vacío = bucket)* | Carpeta local con documentos, para pruebas |
 | `INDICE_TTL_SEG` | `30` | Cada cuántos segundos se buscan documentos nuevos en el bucket |
 | `DOCS_MAX_MB` | `50` | Tamaño máximo de un documento para indexarlo |
+| `HU_INPUT_URI` | `gs://adk_ing/projects/` | Proyectos de entrada del orquestador (o carpeta local) |
+| `HU_RESULTS_URI` | `salidas_hu` | Resultados, estado y auditoría (carpeta local o `gs://bucket-resultados`) |
+| `HU_STATE_URI` | *(= resultados)* | Destino aparte para el estado, si se quiere |
+| `HU_MODEL` | `ADK_MODEL` | Modelo de los agentes del orquestador |
+| `HU_CONFIDENCE_AUTO` / `HU_CONFIDENCE_REVIEW` | `0.85` / `0.60` | Umbrales HITL de confianza |
+| `HU_MAX_HISTORIAS_POR_EJECUCION` | `10` | Historias analizadas por ejecución |
+| `HU_MAX_REANALISIS` | `2` | Reanálisis permitidos tras MODIFIED |
+| `HU_MAX_REINTENTOS` | `2` | Reintentos ante errores transitorios |
+| `HU_MAX_LLAMADAS_LLM_POR_HISTORIA` | `12` | Límite de llamadas al modelo por historia |

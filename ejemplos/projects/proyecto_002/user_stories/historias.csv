@@ -1,0 +1,3 @@
+id,titulo,descripcion,criterios,estado
+US-001,Agendar cita en línea,Como paciente quiero agendar una cita en línea para evitar filas en la sede,"Se muestran horarios disponibles; El paciente recibe confirmación por correo",draft
+US-002,Cancelar cita,Como recepcionista quiero cancelar una cita para liberar el horario,La cita cancelada vuelve a estar disponible,draft

@@ -1,0 +1,8 @@
+project_id: PRJ001
+project_name: Sistema de Vigilancia Epidemiológica de Dengue
+status: active
+owner: equipo_vigilancia
+version: 1.3
+description: >
+  Plataforma para que el equipo de vigilancia en salud pública monitoree los casos
+  de dengue por municipio y semana epidemiológica. Proyecto de ejemplo con contenido ficticio.

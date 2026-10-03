@@ -1,0 +1,12 @@
+{
+  "id": "US-001",
+  "title": "Visualizar incidencia de dengue por municipio",
+  "epic": "EP-01 Tablero epidemiológico",
+  "description": "Como epidemiólogo quiero visualizar la incidencia de dengue por municipio para identificar territorios con mayor riesgo.",
+  "acceptance_criteria": [
+    "visualizar incidencia",
+    "filtrar por municipio",
+    "filtrar por semana epidemiológica"
+  ],
+  "status": "draft"
+}

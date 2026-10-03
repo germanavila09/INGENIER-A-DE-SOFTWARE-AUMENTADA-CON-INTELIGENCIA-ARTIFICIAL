@@ -19,7 +19,7 @@ def test_adk_web_lista_el_agente(monkeypatch, tmp_path):
         artifact_service_uri="memory://",
     )
     with TestClient(app) as client:
-        assert client.get("/list-apps").json() == ["agente_bucket"]
+        assert client.get("/list-apps").json() == ["agente_bucket", "orquestador_hu"]
         assert client.get("/dev-ui/").status_code == 200
         s = client.post("/apps/agente_bucket/users/u1/sessions", json={})
         assert s.status_code == 200 and s.json()["appName"] == "agente_bucket"

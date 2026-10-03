@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "adk-ing"
 version = "0.1.0"
-description = "Ingeniería de Software Aumentada con IA — consumo del bucket gs://adk_ing con Google ADK"
+description = "Ingeniería de Software Aumentada con IA — agentes y sistema multiagente con Google ADK sobre gs://adk_ing"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -17,6 +17,9 @@ dependencies = [
     "python-docx>=1.1",
     "python-pptx>=1.0",
     "openpyxl>=3.1",
+    # sistema multiagente
+    "pyyaml>=6.0",
+    "pydantic>=2.6",
 ]
 
 [project.optional-dependencies]
@@ -30,4 +33,4 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "agents"]
+pythonpath = ["src", "agents", "tests"]
