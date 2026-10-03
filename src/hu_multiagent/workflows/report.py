@@ -50,6 +50,7 @@ def build_reports(store: ProjectStore, state: ProjectState, context: ProjectCont
             "review_pending": rec.review_pending, "quality_score": rec.quality_score, "confidence": rec.confidence,
             "invest_score": analysis.get("invest_score"), "depends_on": by_id[sid].depends_on if sid in by_id else [],
             "pending_decision_id": rec.pending_decision_id, "approved_by_human": rec.approved_by_human,
+            "origin": by_id[sid].origin if sid in by_id else rec.origin,
         })
         for resp in agg.get("responses", []):
             for r in resp.get("risks", []):
@@ -89,7 +90,12 @@ def build_reports(store: ProjectStore, state: ProjectState, context: ProjectCont
         flag = " (revisar)" if b["review_pending"] else ""
         q = f"{b['quality_score']:.0f}" if b["quality_score"] is not None else "—"
         c = f"{b['confidence']:.2f}" if b["confidence"] is not None else "—"
-        lines.append(f"| {i} | {b['story_id']} {b['title']} | {b['state']}{flag} | {b['hitl_level']} | {q} | {c} |")
+        ia = " *(IA)*" if b.get("origin") == "generated" else ""
+        lines.append(f"| {i} | {b['story_id']} {b['title']}{ia} | {b['state']}{flag} | {b['hitl_level']} | {q} | {c} |")
+    if any(b.get("origin") == "generated" for b in backlog):
+        lines += ["", "> Las historias marcadas *(IA)* fueron generadas por story_generator_agent a partir de los "
+                      "documentos del proyecto (ver generated/story_generation.json con su evidencia). "
+                      "Requieren validación del dueño del producto."]
     if cycles:
         lines += ["", "**Dependencias circulares:** " + "; ".join(" → ".join(c) for c in cycles)]
     if pend:

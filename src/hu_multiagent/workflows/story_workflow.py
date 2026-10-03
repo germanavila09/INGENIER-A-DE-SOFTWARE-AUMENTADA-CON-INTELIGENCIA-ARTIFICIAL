@@ -25,7 +25,8 @@ from ..agents.story_analyst.agent import build_story_analyst
 PARALLEL_AGENTS = ("architecture_agent", "qa_agent")
 
 
-def build_story_workflow(model, confidence_auto: float = 0.85, confidence_review: float = 0.60) -> SequentialAgent:
+def build_story_workflow(model, confidence_auto: float = 0.85, confidence_review: float = 0.60,
+                         generated_requires_approval: bool = False) -> SequentialAgent:
     parallel = ParallelAgent(
         name="parallel_review",
         description="Evaluaciones independientes de la historia en paralelo.",
@@ -38,6 +39,6 @@ def build_story_workflow(model, confidence_auto: float = 0.85, confidence_review
             build_story_analyst(model),
             parallel,
             build_review_aggregator(),
-            build_hitl_evaluator(confidence_auto, confidence_review),
+            build_hitl_evaluator(confidence_auto, confidence_review, generated_requires_approval),
         ],
     )

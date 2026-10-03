@@ -43,11 +43,11 @@ class ModeloSimulado(BaseLlm):
 
 
 def test_agente_busca_y_cita(monkeypatch, tmp_path):
-    from agente_bucket import agent as mod
+    import adk_ing.agente as mod
 
     shutil.copytree(EJEMPLOS, tmp_path / "docs")
     monkeypatch.setattr(mod, "_indice", IndiceDocumentos(CarpetaLocal(tmp_path / "docs"), ttl_segundos=0))
-    agente = mod.root_agent.clone(update={"model": ModeloSimulado()})
+    agente = mod.build_bucket_agent(model=ModeloSimulado())
 
     runner = InMemoryRunner(agent=agente, app_name="prueba")
     sesion = runner.session_service.create_session_sync(app_name="prueba", user_id="u")

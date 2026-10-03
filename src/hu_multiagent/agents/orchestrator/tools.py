@@ -18,19 +18,28 @@ def descubrir_proyectos() -> dict:
     """
     try:
         eng = get_engine()
-        return {"status": "ok", "fuente": eng.input.description, "proyectos": eng.discover()}
+        proyectos = eng.discover()
+        out = {"status": "ok", "fuente": eng.input.description, "proyectos": proyectos}
+        if not proyectos:
+            out["sugerencia"] = (f"No hay archivos en {eng.input.description}. Revisa HU_INPUT_URI en el .env "
+                                 "o pregunta a agente_documentos qué hay en el bucket.")
+        return out
     except Exception as exc:
         return _err(exc)
 
 
-async def analizar_proyecto(project_id: str, historias: str = "", forzar: bool = False) -> dict:
+async def analizar_proyecto(project_id: str, historias: str = "", forzar: bool = False,
+                            regenerar_historias: bool = False) -> dict:
     """Ejecuta el flujo completo sobre un proyecto: manifest, ingesta, contexto y análisis
-    multiagente de las historias pendientes, con evaluación HITL.
+    multiagente de las historias pendientes, con evaluación HITL. Si el proyecto no tiene
+    historias escritas, story_generator_agent las genera desde sus documentos (actas,
+    notas, propuestas) y luego se evalúan igual que las demás.
 
     Args:
-        project_id: ID del proyecto (p. ej. PRJ001) o nombre de su carpeta.
+        project_id: ID del proyecto (p. ej. PRJ001, SERVI_SINCHI) o el nombre como lo escribió el usuario.
         historias: Opcional. IDs separados por coma para limitar el análisis (p. ej. "US-001,US-003").
         forzar: True para reanalizar también historias ya terminadas.
+        regenerar_historias: True para volver a generar el backlog de un proyecto sin historias escritas.
 
     Returns:
         dict con el estado final, historias listas, en revisión, esperando decisión humana
@@ -38,7 +47,8 @@ async def analizar_proyecto(project_id: str, historias: str = "", forzar: bool =
     """
     try:
         ids = [h for h in historias.split(",") if h.strip()] if historias else None
-        return await get_engine().analyze_project(project_id, story_ids=ids, force=forzar)
+        return await get_engine().analyze_project(project_id, story_ids=ids, force=forzar,
+                                                  regenerate=regenerar_historias)
     except ProjectNotFound as exc:
         return {"status": "error", "mensaje": str(exc)}
     except Exception as exc:

@@ -106,7 +106,7 @@ def test_archivo_danado_no_rompe_el_indice(carpeta):
 # ------------------------------------------------------- herramientas del agente
 @pytest.fixture
 def agente(monkeypatch, carpeta):
-    from agente_bucket import agent as mod
+    import adk_ing.agente as mod
 
     monkeypatch.setattr(mod, "_indice", IndiceDocumentos(CarpetaLocal(carpeta), ttl_segundos=0))
     return mod

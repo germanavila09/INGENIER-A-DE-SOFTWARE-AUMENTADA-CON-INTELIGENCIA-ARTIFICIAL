@@ -32,7 +32,10 @@ class UserStory(BaseModel):
     approved: bool = Field(False, description="True si la historia ya fue aprobada por humanos.")
     source: str = ""
     source_format: str = ""
-    signature: str = Field("", description="Firma del documento fuente al leerla.")
+    signature: str = Field("", description="Firma del contenido de la historia (detecta cambios).")
+    origin: str = Field("document", description="document = escrita en un documento; generated = propuesta por IA.")
+    evidence: list[Statement] = Field(default_factory=list, description="Citas que respaldan una historia generada.")
+    generation_confidence: float | None = None
 
     def narrative(self) -> str:
         if self.role or self.need:
@@ -184,4 +187,29 @@ class QATestOutput(BaseModel):
     untestable_criteria: list[Statement] = Field(default_factory=list)
     coverage_gaps: list[str] = Field(default_factory=list)
     status: ReviewStatus
+    confidence: float
+
+
+# -------------------------------------------------------- story_generator
+class GeneratedStory(BaseModel):
+    story_id: str = Field(description="HU-IA-001, HU-IA-002…")
+    title: str
+    epic: str = ""
+    role: str
+    need: str
+    benefit: str
+    acceptance_criteria: list[str]
+    business_rules: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    evidence: list[Statement] = Field(description="Citas breves de los documentos que respaldan la historia.")
+    open_questions: list[Question] = Field(default_factory=list)
+    confidence: float = Field(description="0-1: qué tan respaldada está la historia por los documentos.")
+
+
+class StoryGenerationOutput(BaseModel):
+    project_summary: str
+    epics: list[str] = Field(default_factory=list)
+    stories: list[GeneratedStory] = Field(default_factory=list)
+    decisions_found: list[Statement] = Field(default_factory=list, description="Decisiones tomadas en los documentos.")
+    open_questions: list[Question] = Field(default_factory=list, description="Temas en discusión o información faltante.")
     confidence: float

@@ -58,7 +58,7 @@ def verificar_entorno() -> None:
     local = os.getenv("DOCS_LOCAL_DIR", "").strip()
     origen = f"carpeta local {local}" if local else f"gs://{s.bucket}/{s.prefix}"
     print(f"Proyecto: {os.environ['GOOGLE_CLOUD_PROJECT']}  |  Documentos: {origen}")
-    print(f"Orquestador HU: proyectos en {os.getenv('HU_INPUT_URI', 'gs://adk_ing/projects/')}"
+    print(f"Orquestador HU: proyectos en {os.getenv('HU_INPUT_URI', 'gs://adk_ing/')}"
           f"  →  resultados en {os.getenv('HU_RESULTS_URI', 'salidas_hu')}")
 
     if not (ROOT / ".env").exists():

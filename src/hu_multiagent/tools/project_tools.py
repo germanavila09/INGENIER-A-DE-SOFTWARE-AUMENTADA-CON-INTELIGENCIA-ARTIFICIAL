@@ -27,7 +27,7 @@ from ..models.project import (
 )
 from ..models.user_story import UserStory
 from ..services.storage_service import InputStorage
-from .gcs_tools import read_project_file, scan_project_files
+from .gcs_tools import read_project_file, root_folder_uri, root_label, root_path, scan_project_files, split_root
 
 # ---------------------------------------------------------------- clasificar
 FOLDER_CATEGORY = {
@@ -49,7 +49,9 @@ KEYWORD_CATEGORY = [
     (("backlog",), C.BACKLOG),
     (("epica", "épica", "epic"), C.EPICS),
     (("arquitect", "architect"), C.ARCHITECTURE),
-    (("acta", "decision", "decisión", "adr"), C.DECISIONS),
+    (("acta", "decision", "decisión", "adr", "notas", "minuta", "reunion", "reunión", "sesion", "sesión",
+      "meeting", "comite", "comité"), C.DECISIONS),
+    (("propuesta", "proposal", "alcance", "cronograma"), C.FUNCTIONAL),
     (("requisit", "requer", "requirement", "srs"), C.REQUIREMENTS),
     (("tecnic", "técnic", "technical"), C.TECHNICAL),
     (("criterio", "acceptance"), C.ACCEPTANCE_CRITERIA),
@@ -78,21 +80,24 @@ def classify(inner_path: str) -> C:
 
 # ------------------------------------------------------------------ manifest
 def parse_project_info(root: str, project_yaml: bytes | None) -> ProjectInfo:
+    label = root_label(root)
     if project_yaml:
         data = yaml.safe_load(project_yaml.decode("utf-8")) or {}
         if isinstance(data, dict) and data.get("project_id"):
             return ProjectInfo(
                 project_id=str(data["project_id"]),
-                project_name=str(data.get("project_name", root)),
+                project_name=str(data.get("project_name", label)),
                 status=str(data.get("status", "")),
                 owner=str(data.get("owner", "")),
                 version=str(data.get("version", "")),
                 description=str(data.get("description", "")),
                 from_project_yaml=True,
             )
-    # Sin project.yaml: el id sale del nombre de la carpeta (y queda una open_question).
-    pid = re.sub(r"[^A-Za-z0-9_\-]", "_", root).upper()[:64]
-    return ProjectInfo(project_id=pid, project_name=root, from_project_yaml=False)
+    # Sin project.yaml: el id sale del nombre de la carpeta o del prefijo de los archivos
+    # sueltos (y queda una open_question).
+    pid = re.sub(r"[^A-Za-z0-9_\-]", "_", label).upper()[:64].strip("_") or "PROYECTO"
+    nombre = label.replace("_", " ") if split_root(root)[1] else label
+    return ProjectInfo(project_id=pid, project_name=nombre, from_project_yaml=False)
 
 
 def build_manifest(storage: InputStorage, root: str, previous: ProjectManifest | None = None) -> ProjectManifest:
@@ -109,7 +114,7 @@ def build_manifest(storage: InputStorage, root: str, previous: ProjectManifest |
         docs.append(
             DocumentRef(
                 path=inner,
-                uri=storage.uri_for(f"{root}/{inner}"),
+                uri=storage.uri_for(root_path(root, inner)),
                 category=classify(inner),
                 format=PurePosixPath(inner).suffix.lower().lstrip(".") or "sin_extension",
                 size=obj.size,
@@ -129,7 +134,7 @@ def build_manifest(storage: InputStorage, root: str, previous: ProjectManifest |
         project_id=info.project_id,
         project_name=info.project_name,
         bucket=storage.bucket or storage.uri,
-        root_path=storage.uri_for(root + "/"),
+        root_path=root_folder_uri(storage, root),
         documents=docs,
         user_stories=[d.path for d in docs if d.category in STORY_CATEGORIES],
         architecture_documents=[d.path for d in docs if d.category == C.ARCHITECTURE],
@@ -191,7 +196,7 @@ def _office_authors(fmt: str, data: bytes) -> list[str]:
     return []
 
 
-def normalize_document(storage: InputStorage, root: str, ref: DocumentRef, max_chars: int = 60000) -> NormalizedDocument:
+def normalize_document(storage: InputStorage, root: str, ref: DocumentRef, max_chars: int = 250000) -> NormalizedDocument:
     data = read_project_file(storage, root, ref.path)
     warnings: list[str] = []
     structured = None

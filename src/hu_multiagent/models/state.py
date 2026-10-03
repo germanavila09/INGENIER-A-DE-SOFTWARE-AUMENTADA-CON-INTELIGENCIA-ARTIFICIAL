@@ -95,6 +95,7 @@ class StoryRecord(BaseModel):
     source: str = ""
     source_signature: str = ""
     approved_by_human: bool = False
+    origin: str = "document"
     source_changed: bool = False
     original_version_signature: str = ""
     pending_reanalysis: bool = Field(False, description="MODIFIED por un humano: falta reanalizar.")
@@ -119,6 +120,7 @@ class RunSummary(BaseModel):
     waiting: list[str] = Field(default_factory=list)
     errors: dict[str, str] = Field(default_factory=dict)
     skipped: list[str] = Field(default_factory=list)
+    generation: str = Field("", description="generadas / regeneradas / reutilizadas si se usó el generador.")
 
 
 class ProjectState(BaseModel):

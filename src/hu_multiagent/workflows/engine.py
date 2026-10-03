@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -33,17 +34,20 @@ from ..models.hitl import (
 )
 from ..models.project import NormalizedDocument, ProjectContext, ProjectManifest
 from ..models.state import STORY_IN_PROGRESS, STORY_TERMINAL, ProjectState, RunSummary, StoryRecord, WorkflowState
-from ..models.user_story import ArchitectureReviewOutput, StoryAnalysisOutput, UserStory
+from ..models.user_story import ArchitectureReviewOutput, StoryAnalysisOutput, StoryGenerationOutput, UserStory
 from ..services.audit_service import AuditEntry, AuditService
 from ..services.state_service import StateService
 from ..services.storage_service import InputStorage, ProjectStore, make_backend
-from ..tools.gcs_tools import list_project_roots, read_project_file
+from ..tools.gcs_tools import list_project_roots, read_project_file, root_folder_uri, root_label, scan_project_files, split_root
 from ..tools.project_tools import context_for_prompt, parse_project_info
+from ..agents.story_generator.agent import build_story_generator
+from ..agents.story_generator.prompt import K_GEN_CONTEXT, K_GEN_LIMIT, K_GEN_OUT, K_PREVIOUS
 from .project_workflow import build_project_workflow
 from .report import build_reports, dependency_order
 from .story_workflow import PARALLEL_AGENTS, build_story_workflow
 
 S = WorkflowState
+GENERATION_FILE = "generated/story_generation.json"
 LLM_AGENTS = ("story_analyst_agent",) + PARALLEL_AGENTS
 
 
@@ -89,10 +93,13 @@ class HuEngine:
         self.audit = AuditService(self.settings.results_uri, backend=self._results)
         self.model = model or self.settings.model
         self.project_workflow = build_project_workflow(self)
-        self.story_workflow = build_story_workflow(self.model, self.settings.confidence_auto, self.settings.confidence_review)
+        self.story_workflow = build_story_workflow(self.model, self.settings.confidence_auto, self.settings.confidence_review,
+                                                   self.settings.generated_requires_approval)
+        self.story_generator = build_story_generator(self.model)
         self._sessions = InMemorySessionService()
         self._project_runner = Runner(agent=self.project_workflow, app_name="hu_project_workflow", session_service=self._sessions)
         self._story_runner = Runner(agent=self.story_workflow, app_name="hu_story_workflow", session_service=self._sessions)
+        self._generation_runner = Runner(agent=self.story_generator, app_name="hu_story_generation", session_service=self._sessions)
         self._roots: dict[str, str] = {}
         self._lock = asyncio.Lock()
 
@@ -108,16 +115,24 @@ class HuEngine:
                 ids.add(parts[1])
         return sorted(ids)
 
+    def _match(self, project_id: str) -> tuple[str, str] | None:
+        norm = lambda t: re.sub(r"[^a-z0-9]", "", t.lower())  # noqa: E731
+        q = norm(project_id)
+        if not q:
+            return None
+        for pid, root in self._roots.items():
+            if q in (norm(pid), norm(root_label(root))):
+                return pid, root
+        parciales = [(pid, root) for pid, root in self._roots.items() if q in norm(pid) or q in norm(root_label(root))]
+        return parciales[0] if len(parciales) == 1 else None
+
     def _resolve(self, project_id: str) -> tuple[str, str]:
-        if not self._roots:
+        found = self._match(project_id) if self._roots else None
+        if not found:
             self.discover()
-        for pid, root in self._roots.items():
-            if project_id.lower() in (pid.lower(), root.lower()):
-                return pid, root
-        self.discover()
-        for pid, root in self._roots.items():
-            if project_id.lower() in (pid.lower(), root.lower()):
-                return pid, root
+            found = self._match(project_id)
+        if found:
+            return found
         raise ProjectNotFound(f"No encontré el proyecto {project_id!r} en {self.input.description}. "
                               f"Disponibles: {', '.join(self._roots) or 'ninguno'}")
 
@@ -127,26 +142,30 @@ class HuEngine:
         out, vistos = [], {}
         self._roots = {}
         for root in roots:
-            try:
-                yml = read_project_file(self.input, root, "project.yaml")
-            except Exception:
-                yml = None
+            yml = None
+            if not split_root(root)[1]:
+                try:
+                    yml = read_project_file(self.input, root, "project.yaml")
+                except Exception:
+                    yml = None
             info = parse_project_info(root, yml)
             if info.project_id in vistos:
-                out.append({"carpeta": root, "error": f"project_id {info.project_id} repetido (ya lo usa {vistos[info.project_id]})"})
+                out.append({"ubicacion": root, "error": f"project_id {info.project_id} repetido (ya lo usa {vistos[info.project_id]})"})
                 continue
             vistos[info.project_id] = root
             self._roots[info.project_id] = root
             nuevo = not self.state.exists(info.project_id)
             st = self.state.load(info.project_id)
             st.project_name = info.project_name
-            st.root_path = self.input.uri_for(root + "/")
+            st.root_path = root_folder_uri(self.input, root)
             self.state.save(st)
             if nuevo:
                 self.audit.record(AuditEntry(event="project_discovered", project_id=info.project_id,
                                              agent="project_discovery_agent", source=st.root_path))
             out.append({
-                "project_id": info.project_id, "project_name": info.project_name, "carpeta": root,
+                "project_id": info.project_id, "project_name": info.project_name, "ubicacion": root,
+                "organizacion": "archivos sueltos agrupados por nombre" if split_root(root)[1] else "carpeta",
+                "archivos": len(scan_project_files(self.input, root)),
                 "status_declarado": info.status, "owner": info.owner, "version": info.version,
                 "tiene_project_yaml": info.from_project_yaml, "estado_flujo": st.state.value,
                 "historias_registradas": len(st.stories), "decisiones_pendientes": len(st.pending_decisions()),
@@ -155,11 +174,11 @@ class HuEngine:
 
     # ========================================================= analizar proyecto
     async def analyze_project(self, project_id: str, story_ids: list[str] | None = None, force: bool = False,
-                              trigger: str = "usuario") -> dict:
+                              trigger: str = "usuario", regenerate: bool = False) -> dict:
         async with self._lock:
-            return await self._analyze_project(project_id, story_ids, force, trigger)
+            return await self._analyze_project(project_id, story_ids, force, trigger, regenerate)
 
-    async def _analyze_project(self, project_id, story_ids, force, trigger) -> dict:
+    async def _analyze_project(self, project_id, story_ids, force, trigger, regenerate=False) -> dict:
         pid, root = self._resolve(project_id)
         run_id = new_run_id()
         state = self.state.load(pid)
@@ -183,6 +202,18 @@ class HuEngine:
         except Exception as exc:
             return self._fail_project(pid, run_id, summary, exc)
 
+        # ---------------- 1b. sin historias escritas → el generador propone el backlog
+        generacion = None
+        if not stories:
+            try:
+                stories, generacion = await self._generated_stories(pid, context, docs, run_id, regenerate)
+            except Exception as exc:
+                summary.errors["_generacion"] = f"{type(exc).__name__}: {exc}"[:300]
+                if classify_error(exc) == "fatal":
+                    return self._fail_project(pid, run_id, summary, exc, context=context)
+                stories = []
+            summary.generation = generacion or ""
+
         state = self.state.load(pid)
         state.manifest_version, state.last_scan = manifest.version, manifest.last_scan
         by_id = {s.story_id: s for s in stories}
@@ -190,7 +221,7 @@ class HuEngine:
             rec = state.stories.get(s.story_id)
             if rec is None:
                 state.stories[s.story_id] = StoryRecord(story_id=s.story_id, title=s.title, source=s.source,
-                                                        source_signature=s.signature)
+                                                        source_signature=s.signature, origin=s.origin)
             elif rec.source_signature != s.signature:
                 rec.source_changed, rec.source_signature, rec.title = True, s.signature, s.title
         self.state.save(state)
@@ -216,6 +247,91 @@ class HuEngine:
                 return self._fail_project(pid, run_id, summary, exc, stories=stories, context=context)
 
         return self._finalize(pid, run_id, summary, context, stories)
+
+    async def _generated_stories(self, pid: str, context: ProjectContext, docs: list[NormalizedDocument],
+                                 run_id: str, regenerate: bool) -> tuple[list[UserStory], str | None]:
+        """Historias propuestas por story_generator_agent; se reutilizan mientras los documentos no cambien."""
+        if not any(d.text for d in docs):
+            return [], None
+        store = self.results_store(pid)
+        firmas = {d.path: d.signature for d in docs}
+        previa = store.read_json(GENERATION_FILE)
+        if previa and not regenerate and previa.get("doc_signatures") == firmas:
+            return [UserStory.model_validate(s) for s in previa["stories"]], "reutilizadas"
+
+        prompt_ctx = context_for_prompt(context, docs, [], "", self.settings.generation_context_max_chars)
+        anteriores = [{k: s[k] for k in ("story_id", "title", "role", "need", "benefit", "acceptance_criteria")}
+                      for s in (previa or {}).get("stories", [])]
+        session_state = {K_PROJECT_ID: pid, K_RUN_ID: run_id, K_GEN_CONTEXT: prompt_ctx,
+                         K_PREVIOUS: anteriores or None, K_GEN_LIMIT: self.settings.max_generated_stories}
+        t0 = time.monotonic()
+        last_exc, out, tokens = None, None, defaultdict(int)
+        for intento in range(self.settings.max_retries + 1):
+            session = await self._sessions.create_session(app_name="hu_story_generation", user_id="orchestrator",
+                                                          state=dict(session_state))
+            try:
+                msg = types.Content(role="user", parts=[types.Part.from_text(text=f"Genera el backlog del proyecto {pid}.")])
+                async for ev in self._generation_runner.run_async(
+                        user_id="orchestrator", session_id=session.id, new_message=msg,
+                        run_config=RunConfig(max_llm_calls=self.settings.max_llm_calls_per_story)):
+                    if ev.usage_metadata:
+                        for k in ("prompt_token_count", "candidates_token_count", "total_token_count"):
+                            tokens[k] += getattr(ev.usage_metadata, k, None) or 0
+                    if ev.content and ev.content.parts and any((p.text or "").startswith("BLOQUEADO") for p in ev.content.parts):
+                        raise FatalError(ev.content.parts[0].text)
+                final = await self._sessions.get_session(app_name="hu_story_generation", user_id="orchestrator",
+                                                         session_id=session.id)
+                if not final.state.get(K_GEN_OUT):
+                    raise RecoverableError("story_generator_agent no produjo historias")
+                out = StoryGenerationOutput.model_validate(final.state[K_GEN_OUT])
+                break
+            except Exception as exc:
+                last_exc = exc
+                if classify_error(exc) == "fatal" or intento >= self.settings.max_retries:
+                    raise
+                await asyncio.sleep(self.retry_backoff_s * (2 ** intento))
+            finally:
+                await self._sessions.delete_session(app_name="hu_story_generation", user_id="orchestrator",
+                                                    session_id=session.id)
+        if out is None:
+            raise last_exc or RecoverableError("generación sin resultado")
+
+        source = store.uri(GENERATION_FILE)
+        stories, vistos = [], set()
+        for g in out.stories[: self.settings.max_generated_stories]:
+            sid = re.sub(r"[^A-Z0-9\-]", "", g.story_id.upper()) or f"HU-IA-{len(stories) + 1:03d}"
+            while sid in vistos:
+                sid += "B"
+            vistos.add(sid)
+            us = UserStory(
+                story_id=sid, project_id=pid, title=g.title, epic=g.epic, role=g.role, need=g.need, benefit=g.benefit,
+                description=f"Como {g.role} quiero {g.need} para {g.benefit}", acceptance_criteria=g.acceptance_criteria,
+                business_rules=g.business_rules, depends_on=[d.upper() for d in g.depends_on], status="generada por IA",
+                source=source, source_format="generated", origin="generated", evidence=g.evidence,
+                generation_confidence=g.confidence,
+            )
+            us.signature = stable_hash(us.model_dump(exclude={"signature", "source"}))
+            stories.append(us)
+
+        data = {"project_id": pid, "run_id": run_id, "created_at": now_iso(), "doc_signatures": firmas,
+                "output": out.model_dump(mode="json"), "stories": [s.model_dump(mode="json") for s in stories]}
+        store.write_json(GENERATION_FILE, data)
+        version, _ = store.write_version("generated/story_generation/versions", "BACKLOG", "agent_proposal", data)
+        self.audit.record(AuditEntry(
+            event="agent_output", run_id=run_id, project_id=pid, agent="story_generator_agent",
+            input_hash=stable_hash([prompt_ctx, anteriores]), output_hash=stable_hash(data["output"]),
+            confidence=out.confidence, latency_ms=int((time.monotonic() - t0) * 1000), tokens=dict(tokens),
+            decision=f"{len(stories)} historias generadas desde {len(docs)} documento(s)",
+            human_approval="REVIEW_PENDING", details={"version": version, "ids": [s.story_id for s in stories]},
+        ))
+        # Historias de una generación anterior que ya no aplican: su decisión pendiente se invalida.
+        state = self.state.load(pid)
+        nuevas = {s.story_id for s in stories}
+        for d in state.decisions.values():
+            if d.pending and d.request.story_id not in nuevas:
+                d.superseded_by_run = run_id
+        self.state.save(state)
+        return stories, "regeneradas" if previa else "generadas"
 
     def _needs_processing(self, rec: StoryRecord, force: bool) -> bool:
         if rec.pending_reanalysis:
@@ -249,7 +365,7 @@ class HuEngine:
 
         # Versión original: nunca se sobrescribe; una nueva por cada cambio en la fuente.
         if rec.original_version_signature != story.signature:
-            store.write_version(f"{base}/versions", sid, "original", story)
+            store.write_version(f"{base}/versions", sid, "original" if story.origin == "document" else "ai_generated", story)
             store.write_json(f"{base}/original.json", story)
             rec.original_version_signature = story.signature
 
@@ -475,6 +591,7 @@ class HuEngine:
             if r.run_id == run_id:
                 r.processed, r.ready, r.review, r.waiting = summary.processed, summary.ready, summary.review, summary.waiting
                 r.errors, r.skipped, r.finished_at = summary.errors, summary.skipped, now_iso()
+                r.generation = summary.generation
         self.state.save(state)
         self.audit.record(AuditEntry(event="run_finished", run_id=run_id, project_id=pid, agent="orchestrator_agent",
                                      decision=state.state.value, details=summary.model_dump(exclude={"run_id"})))
@@ -502,6 +619,7 @@ class HuEngine:
             "status": state.state.value,
             "project_id": state.project_id,
             "run_id": run_id,
+            "historias_generadas_por_ia": summary.generation or "no",
             "procesadas": summary.processed,
             "listas_para_implementacion": summary.ready,
             "continuan_con_revision": summary.review,
@@ -616,7 +734,7 @@ class HuEngine:
         return {
             "project_id": pid, "project_name": st.project_name, "estado": st.state.value,
             "manifest_version": st.manifest_version, "ultimo_escaneo": st.last_scan, "ultimo_error": st.last_error,
-            "historias": [{"story_id": r.story_id, "titulo": r.title, "estado": r.state.value, "hitl": r.hitl_level,
+            "historias": [{"story_id": r.story_id, "titulo": r.title, "origen": r.origin, "estado": r.state.value, "hitl": r.hitl_level,
                            "revisar_despues": r.review_pending, "calidad": r.quality_score, "confianza": r.confidence,
                            "decision_pendiente": r.pending_decision_id, "aprobada_por_humano": r.approved_by_human,
                            "error": r.last_error} for r in st.stories.values()],

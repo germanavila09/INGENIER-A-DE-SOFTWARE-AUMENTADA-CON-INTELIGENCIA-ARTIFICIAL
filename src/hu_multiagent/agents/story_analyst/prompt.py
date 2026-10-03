@@ -44,6 +44,11 @@ documentos; la historia ya estaba aprobada y propones cambios significativos; re
 de negocio contradictorias; criterios no verificables; dependencias externas no
 confirmadas; o confianza menor a 0.6.
 
+## Historias generadas por IA
+Si la historia tiene `origin = "generated"`, fue propuesta por otro agente a partir de
+actas o notas. Verifica que cada criterio esté respaldado por su `evidence`; lo que no
+lo esté va como ambigüedad o pregunta, y no lo presentes como FACT.
+
 ## Confianza
 `confidence` (0 a 1) mide qué tan seguro estás de TU análisis con la información
 disponible, no la calidad de la historia. `summary`: 2 o 3 frases.

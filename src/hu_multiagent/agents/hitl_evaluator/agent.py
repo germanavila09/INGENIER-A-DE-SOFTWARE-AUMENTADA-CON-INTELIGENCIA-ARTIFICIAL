@@ -18,6 +18,7 @@ from .prompt import DESCRIPTION
 class HitlEvaluatorAgent(BaseAgent):
     confidence_auto: float = Field(0.85)
     confidence_review: float = Field(0.60)
+    generated_requires_approval: bool = Field(False)
 
     async def _run_async_impl(self, ctx) -> AsyncGenerator[Event, None]:
         st = ctx.session.state
@@ -26,6 +27,8 @@ class HitlEvaluatorAgent(BaseAgent):
         ev = evaluate_hitl(
             agg,
             story_approved=bool(story.get("approved")),
+            generated=story.get("origin") == "generated",
+            generated_requires_approval=self.generated_requires_approval,
             confidence_auto=self.confidence_auto,
             confidence_review=self.confidence_review,
         )
@@ -38,8 +41,10 @@ class HitlEvaluatorAgent(BaseAgent):
         )
 
 
-def build_hitl_evaluator(confidence_auto: float, confidence_review: float) -> HitlEvaluatorAgent:
+def build_hitl_evaluator(confidence_auto: float, confidence_review: float,
+                         generated_requires_approval: bool = False) -> HitlEvaluatorAgent:
     return HitlEvaluatorAgent(
         name="hitl_evaluator_agent", description=DESCRIPTION,
         confidence_auto=confidence_auto, confidence_review=confidence_review,
+        generated_requires_approval=generated_requires_approval,
     )

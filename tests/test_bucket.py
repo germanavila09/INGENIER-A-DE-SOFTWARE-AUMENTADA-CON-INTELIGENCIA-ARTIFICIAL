@@ -88,7 +88,7 @@ def test_safe_target_bloquea_path_traversal(tmp_path):
 def test_indice_sobre_el_bucket(monkeypatch):
     """El agente funciona igual sobre el bucket (cliente falso) que sobre una carpeta."""
     from adk_ing.indice import IndiceDocumentos
-    from agente_bucket import agent as mod
+    import adk_ing.agente as mod
 
     reader = BucketReader(bucket_name="adk_ing", prefix="", client=FakeClient())
     monkeypatch.setattr(mod, "_indice", IndiceDocumentos(reader, ttl_segundos=0))
@@ -101,4 +101,5 @@ def test_indice_sobre_el_bucket(monkeypatch):
     assert r["resultados"][0]["documento"] == "documentos/guia.md"
     assert set(r["documentos_recien_indexados"]) == {"documentos/guia.md", "datos/tabla.csv"}
 
-    assert mod.root_agent.name == "agente_bucket"
+    from agente_bucket.agent import root_agent
+    assert root_agent.name == "agente_bucket"

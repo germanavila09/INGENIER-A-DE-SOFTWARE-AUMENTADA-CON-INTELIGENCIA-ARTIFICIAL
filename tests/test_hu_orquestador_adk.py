@@ -75,3 +75,54 @@ def test_orquestador_delega_y_respeta_hitl(tmp_path, monkeypatch):
         assert decision.resolution.decided_by == "german"
     finally:
         set_engine(None)
+
+
+class BucketSimulado(BaseLlm):
+    """Modelo del agente del bucket: lista documentos y responde con el total."""
+
+    model: str = "bucket-simulado"
+
+    async def generate_content_async(self, llm_request, stream=False) -> AsyncGenerator[LlmResponse, None]:
+        fr = [p.function_response for c in llm_request.contents for p in (c.parts or []) if p.function_response]
+        if fr:
+            parte = types.Part.from_text(text=f"Hay {fr[-1].response['total']} documentos en el bucket.")
+        else:
+            parte = types.Part.from_function_call(name="listar_documentos", args={})
+        yield LlmResponse(content=types.Content(role="model", parts=[parte]))
+
+
+class OrquestadorPreguntaAlBucket(BaseLlm):
+    model: str = "orquestador-simulado-2"
+
+    async def generate_content_async(self, llm_request, stream=False) -> AsyncGenerator[LlmResponse, None]:
+        ultimo = llm_request.contents[-1]
+        fr = [p.function_response for p in ultimo.parts if p.function_response]
+        if fr:
+            RESPUESTAS.append(fr[0].response)
+            parte = types.Part.from_text(text="Listo")
+        else:
+            parte = types.Part.from_function_call(name="agente_documentos",
+                                                  args={"request": "¿Qué documentos hay en el bucket?"})
+        yield LlmResponse(content=types.Content(role="model", parts=[parte]))
+
+
+def test_orquestador_habla_con_el_agente_del_bucket(tmp_path, monkeypatch):
+    import adk_ing.agente as agente_mod
+    from adk_ing.bucket import CarpetaLocal
+    from adk_ing.indice import IndiceDocumentos
+
+    for k, v in {"GOOGLE_GENAI_USE_VERTEXAI": "TRUE", "GOOGLE_CLOUD_PROJECT": "t", "GOOGLE_CLOUD_LOCATION": "us-central1"}.items():
+        monkeypatch.setenv(k, v)
+    docs = Path(__file__).resolve().parents[1] / "docs_ejemplo"
+    monkeypatch.setattr(agente_mod, "_indice", IndiceDocumentos(CarpetaLocal(docs), ttl_segundos=0))
+    orq = build_orchestrator(model=OrquestadorPreguntaAlBucket(), bucket_agent_model=BucketSimulado())
+    runner = InMemoryRunner(agent=orq, app_name="orq2")
+    ses = runner.session_service.create_session_sync(app_name="orq2", user_id="u")
+    msg = types.Content(role="user", parts=[types.Part.from_text(text="¿qué hay en el storage?")])
+
+    async def go():
+        async for _ in runner.run_async(user_id="u", session_id=ses.id, new_message=msg):
+            pass
+
+    asyncio.run(go())
+    assert "Hay 6 documentos en el bucket." in str(RESPUESTAS[-1])

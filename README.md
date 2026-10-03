@@ -76,7 +76,13 @@ texto = reader.read_text("documentos/guia.md")
 
 ### Sistema multiagente de historias de usuario (`orquestador_hu`)
 
-**1. Proyectos en el bucket.** Cada proyecto es una carpeta bajo `HU_INPUT_URI` (por defecto `gs://adk_ing/projects/`), con `project.yaml` opcional y carpetas como `requirements/`, `user_stories/`, `architecture/`, `decisions/`, `technical/`, `tests/`. Para cargar los ejemplos:
+**1. Proyectos en el bucket.** El orquestador recorre `HU_INPUT_URI` (por defecto todo `gs://adk_ing/`) y reconoce tres formas de organizar los proyectos:
+
+- `projects/<carpeta>/`: la recomendada, con `project.yaml` y carpetas como `requirements/`, `user_stories/`, `architecture/` o `decisions/`.
+- `<carpeta>/` en la raíz: cada carpeta es un proyecto.
+- Archivos sueltos agrupados por el prefijo del nombre: «SERVI _ SINCHI __ Sesión técnica … .docx» → proyecto **SERVI_SINCHI**.
+
+Si un proyecto no tiene historias escritas (solo actas, notas de reunión o propuestas), **`story_generator_agent` genera el backlog** con evidencia citada y luego lo evalúa. Para cargar los ejemplos:
 
 ```bash
 gcloud storage cp -r ejemplos/projects gs://adk_ing/
@@ -88,7 +94,9 @@ Para probar sin el bucket, pon `HU_INPUT_URI=ejemplos/projects` en el `.env`.
 
 | Tú escribes | Qué pasa |
 |---|---|
-| «¿Qué proyectos hay?» | `descubrir_proyectos`: lista proyectos, si tienen `project.yaml`, estado y decisiones pendientes |
+| «¿Qué proyectos hay?» | `descubrir_proyectos`: lista proyectos (carpetas o archivos sueltos agrupados), estado y decisiones pendientes |
+| «¿Qué documentos hay de SINCHI en el storage?» | el orquestador le pregunta al agente del bucket (`agente_documentos`) y responde con citas |
+| «Evaluemos el proyecto SERVI _ SINCHI» | sin historias escritas: genera el backlog desde las notas (*IA*, con evidencia) y lo evalúa; las historias quedan en revisión |
 | «Analiza PRJ001» | flujo completo: manifest → ingesta → contexto → por historia: analista → [arquitectura ‖ QA] → agregador → evaluador HITL |
 | «MODIFIED D-PRJ001-US-001-01: la incidencia es casos / población × 100.000 y la población viene de proyecciones DANE» | registra tu corrección y reanaliza la historia automáticamente |
 | «APPROVED D-PRJ001-US-003-01, migrar por lotes» | aprueba; se escribe la versión `_human_approved` |
@@ -98,7 +106,7 @@ Con los ejemplos, PRJ001 se detiene en tres historias: **US-001** por preguntas 
 
 **3. Resultados.** En `HU_RESULTS_URI` (por defecto la carpeta `salidas_hu/`, ignorada por git), dentro de `projects/<ID>/`: `generated/` (manifest, contexto, artefactos por historia y sus versiones, reportes), `state/project_state.json` y `audit/audit_log.jsonl`. Para escribirlos en GCP usa un bucket aparte, p. ej. `HU_RESULTS_URI=gs://adk_ing_resultados`.
 
-**Terminal:** `adk run agents/orquestador_hu`.
+**Terminal:** `adk run agents/orquestador_hu`. Arranca ADK Web con `python adk_web.py` (o `adk web agents`). Si ejecutas `adk web` en la raíz del repo, también funciona, pero el selector muestra `agents.orquestador_hu` y la carpeta `src`.
 
 **Cuenta de servicio con mínimo privilegio** (para Cloud Run o para probar localmente con impersonación):
 
@@ -182,7 +190,10 @@ Las pruebas no requieren credenciales: usan los documentos de `docs_ejemplo/` y 
 | `DOCS_LOCAL_DIR` | *(vacío = bucket)* | Carpeta local con documentos, para pruebas |
 | `INDICE_TTL_SEG` | `30` | Cada cuántos segundos se buscan documentos nuevos en el bucket |
 | `DOCS_MAX_MB` | `50` | Tamaño máximo de un documento para indexarlo |
-| `HU_INPUT_URI` | `gs://adk_ing/projects/` | Proyectos de entrada del orquestador (o carpeta local) |
+| `HU_INPUT_URI` | `gs://adk_ing/` | Dónde busca proyectos el orquestador (o carpeta local) |
+| `HU_MAX_HISTORIAS_GENERADAS` | `12` | Máximo de historias que propone el generador por proyecto |
+| `HU_GENERADAS_REQUIEREN_APROBACION` | `false` | `true` = cada historia generada por IA exige aprobación (nivel 2) |
+| `HU_CONTEXTO_GENERACION_MAX_CARACTERES` | `150000` | Texto de los documentos que recibe el generador |
 | `HU_RESULTS_URI` | `salidas_hu` | Resultados, estado y auditoría (carpeta local o `gs://bucket-resultados`) |
 | `HU_STATE_URI` | *(= resultados)* | Destino aparte para el estado, si se quiere |
 | `HU_MODEL` | `ADK_MODEL` | Modelo de los agentes del orquestador |

@@ -11,10 +11,13 @@ Este documento describe el MVP implementado en `src/hu_multiagent/` y expuesto e
 flowchart TB
     U([Usuario en ADK Web]) <--> O[orchestrator_agent<br/>LLM conversacional]
     O -- herramientas de control --> E{{Motor de orquestación<br/>workflows/engine.py}}
+    O -- AgentTool --> BA[agente_documentos<br/>agente del bucket · LLM]
+    BA -. busca y lee .-> IN
 
     subgraph PW[project_workflow · SequentialAgent]
         D[project_discovery_agent<br/>determinista] --> I[document_ingestion_agent<br/>determinista]
     end
+    PW -- proyecto sin historias --> GEN[story_generator_agent<br/>LLM · historias con evidencia]
 
     subgraph SW[story_workflow · SequentialAgent, una vez por historia]
         A[story_analyst_agent<br/>LLM] --> P
@@ -31,13 +34,14 @@ flowchart TB
     E <--> ST[(StateService<br/>máquina de estados)]
     E --> AU[(AuditService<br/>JSONL + Cloud Logging)]
     E --> RS[(Resultados<br/>projects/ID/generated)]
-    IN[(gs://adk_ing/projects<br/>entrada, solo lectura)] --> PW
-    A & AR & QA -. Vertex AI .-> G[Gemini]
+    IN[(gs://adk_ing<br/>entrada, solo lectura)] --> PW
+    GEN --> SW
+    A & AR & QA & GEN -. Vertex AI .-> G[Gemini]
 ```
 
 **Tres capas:**
 
-1. **Conversación.** `orchestrator_agent` es el único agente con el que habla el usuario. No analiza historias: interpreta la intención y llama a herramientas de control (`descubrir_proyectos`, `analizar_proyecto`, `estado_proyecto`, `listar_decisiones_pendientes`, `registrar_decision_humana`, `explicar_historia`).
+1. **Conversación.** `orchestrator_agent` es el único agente con el que habla el usuario. No analiza historias: interpreta la intención y llama a herramientas de control (`descubrir_proyectos`, `analizar_proyecto`, `estado_proyecto`, `listar_decisiones_pendientes`, `registrar_decision_humana`, `explicar_historia`). Además **habla con el agente del bucket** (`agente_documentos`, vía `AgentTool`) para preguntar qué documentos hay o qué dice uno. Es el mismo agente que la app `agente_bucket`, de solo lectura.
 2. **Control determinista.** El motor (`HuEngine`) aplica el orden de los pasos, la máquina de estados, los límites de iteración, los reintentos, la pausa y la reanudación HITL, el versionado y la auditoría. Ni el LLM del orquestador ni los especialistas pueden saltarse pasos.
 3. **Especialistas.** Son agentes ADK nativos que corren dentro de `SequentialAgent` y `ParallelAgent`. Los que necesitan juicio usan Gemini con salida validada por Pydantic. Los que aplican reglas son `BaseAgent` deterministas.
 
@@ -56,6 +60,8 @@ Con `sub_agents` y transferencia, el LLM decide cuándo y a quién ceder el cont
 | `orchestrator_agent` | LLM + herramientas | mensaje del usuario | respuesta + llamadas a herramientas | `agents/orchestrator/prompt.py` |
 | `project_discovery_agent` | `BaseAgent` | carpeta del proyecto | `ProjectManifest` | `agents/project_discovery/` |
 | `document_ingestion_agent` | `BaseAgent` | manifest | `NormalizedDocument[]`, `UserStory[]`, `ProjectContext` | `agents/ingestion/` |
+| `story_generator_agent` | LLM (`StoryGenerationOutput`) | documentos de un proyecto **sin historias** (actas, notas, propuestas) | backlog propuesto: historias con evidencia citada, épicas, decisiones encontradas, preguntas abiertas | `agents/story_generator/prompt.py` |
+| `agente_documentos` | LLM + herramientas de búsqueda (AgentTool) | pregunta en lenguaje natural del orquestador | respuesta con citas (documento, página) | `src/adk_ing/agente.py` |
 | `story_analyst_agent` | LLM (`StoryAnalysisOutput`) | historia + contexto | INVEST, ambigüedades, preguntas, propuesta | `agents/story_analyst/prompt.py` |
 | `architecture_agent` | LLM (`ArchitectureReviewOutput`) | historia + análisis + contexto | impactos, cambios críticos, estado | `agents/architecture/prompt.py` |
 | `qa_agent` | LLM (`QATestOutput`) | historia + análisis + contexto | casos Given/When/Then, criterios no verificables | `agents/qa/prompt.py` |
@@ -103,6 +109,14 @@ sequenceDiagram
     E->>SW: reanálisis automático de US-001 (máx. 2)
     E-->>O: estado actualizado
 ```
+
+**Generación de historias.** Si la ingesta no encuentra historias escritas, `story_generator_agent` propone el backlog a partir de los documentos del proyecto (con `HU_CONTEXTO_GENERACION_MAX_CARACTERES` de contexto):
+
+- Cada historia trae evidencia: citas FACT con su fuente, o INFERENCE. Los temas en discusión se convierten en preguntas abiertas.
+- El resultado se guarda en `generated/story_generation.json`, con una versión por cada generación. Las historias quedan con `origin = "generated"`.
+- Las historias generadas pasan por el mismo flujo de análisis y nunca quedan automáticas: la regla `GENERATED_STORY` las deja al menos en revisión (nivel 1), o en aprobación (nivel 2) si `HU_GENERADAS_REQUIEREN_APROBACION=true`.
+- Si los documentos no cambian, la generación se reutiliza.
+- Si llega una nota nueva, se regenera pasando el backlog anterior, para conservar los IDs y analizar solo lo nuevo o modificado.
 
 Una historia en nivel 2 se detiene y **las demás siguen**: así el sistema separa automáticamente las tareas que pueden continuar sin intervención humana de las que no.
 
@@ -172,6 +186,14 @@ Mecanismos de aislamiento:
 
 ## 7. Estructura del bucket y de los resultados
 
+`HU_INPUT_URI` (por defecto `gs://adk_ing/`) admite tres formas de organizar los proyectos, y pueden convivir:
+
+| En el bucket | Proyecto |
+|---|---|
+| `projects/<carpeta>/…` (recomendada) | uno por carpeta, con `project.yaml` si existe |
+| `<carpeta>/…` en la raíz | uno por carpeta (p. ej. `documentos/` → DOCUMENTOS) |
+| archivos sueltos en la raíz o en `projects/` | agrupados por el prefijo del nombre antes de `__`, ` - `, `::` o ` | `: «SERVI _ SINCHI __ Sesión técnica … .docx» → **SERVI_SINCHI**. Los que no tienen prefijo van a SIN_PROYECTO |
+
 ```
 gs://adk_ing/projects/                 (entrada: solo lectura)
   proyecto_001/
@@ -236,6 +258,8 @@ Hay además un límite de llamadas LLM por historia (`RunConfig.max_llm_calls`).
 - No hay credenciales en el código.
 
 ## 10. Límites conocidos del MVP
+
+- El agrupamiento de archivos sueltos depende del prefijo del nombre. Para un control explícito, mueve los archivos a `projects/<carpeta>/` y agrega un `project.yaml`.
 
 - El contexto del proyecto es determinista: extractos y reglas detectadas, no un resumen semántico.
 - Las historias se procesan una tras otra. El paralelismo está dentro de cada historia (arquitectura ‖ QA).

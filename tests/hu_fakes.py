@@ -91,6 +91,28 @@ def qa(pid, sid, feedback: bool) -> dict:
     return out
 
 
+def generator(pid, previas: bool) -> dict:
+    ev = lambda t: {"statement": t, "type": "FACT", "source": "notas SINCHI"}  # noqa: E731
+    stories = [
+        {"story_id": "HU-IA-001", "title": "Publicar indicadores de coberturas", "epic": "Indicadores",
+         "role": "analista ambiental", "need": "publicar mensualmente indicadores de coberturas de la tierra",
+         "benefit": "monitorear cambios en la Amazonía", "acceptance_criteria": ["Se publica un indicador por mes"],
+         "business_rules": [], "depends_on": [], "evidence": [ev("los indicadores se publican mensualmente")],
+         "open_questions": [], "confidence": 0.8},
+        {"story_id": "HU-IA-002", "title": "Elegir plataforma de procesamiento", "epic": "Infraestructura",
+         "role": "líder técnico", "need": "decidir entre Google Earth Engine e infraestructura propia",
+         "benefit": "definir la arquitectura del piloto", "acceptance_criteria": ["Queda registrada la decisión"],
+         "business_rules": [], "depends_on": [], "evidence": [ev("Definir si la implementación será en Google Earth Engine")],
+         "open_questions": [_q("¿Quién toma la decisión de plataforma?", blocking=False)], "confidence": 0.7},
+    ]
+    if previas:
+        stories.append({**stories[0], "story_id": "HU-IA-003", "title": "Alertas de deforestación",
+                        "need": "recibir alertas de pérdida de bosque", "evidence": [ev("alertas de pérdida")]})
+    return {"project_summary": f"Resumen de {pid}", "epics": ["Indicadores", "Infraestructura"], "stories": stories,
+            "decisions_found": [ev("el piloto se hará sobre un municipio de la Amazonía")],
+            "open_questions": [_q("¿Umbrales de probabilidad por clase?")], "confidence": 0.78}
+
+
 class ModeloSimulado(BaseLlm):
     model: str = "simulado"
 
@@ -100,7 +122,10 @@ class ModeloSimulado(BaseLlm):
         sid = (re.search(r'"story_id":\s*"([^"]+)"', instr) or [None, ""])[1]
         pid = (re.search(r'"project_id":\s*"([^"]+)"', instr) or [None, ""])[1]
         feedback = "Corrección humana" in instr
-        if "USER_STORY_ANALYST_AGENT" in instr:
+        if "USER_STORY_GENERATOR_AGENT" in instr:
+            pid = (re.search(r"PROYECTO: (\S+)", instr) or [None, ""])[1]
+            agente, data, sid = "story_generator_agent", generator(pid, "Historias generadas previamente" in instr), ""
+        elif "USER_STORY_ANALYST_AGENT" in instr:
             agente, data = "story_analyst_agent", analyst(pid, sid, feedback)
         elif "ARCHITECTURE_AGENT" in instr:
             agente, data = "architecture_agent", architecture(pid, sid)

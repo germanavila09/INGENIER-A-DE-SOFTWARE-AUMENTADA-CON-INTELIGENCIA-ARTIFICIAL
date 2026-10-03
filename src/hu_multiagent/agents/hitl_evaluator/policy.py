@@ -29,6 +29,8 @@ def evaluate_hitl(
     agg: AggregatedReview,
     *,
     story_approved: bool = False,
+    generated: bool = False,
+    generated_requires_approval: bool = False,
     confidence_auto: float = 0.85,
     confidence_review: float = 0.60,
 ) -> HitlEvaluation:
@@ -95,7 +97,15 @@ def evaluate_hitl(
         review.append(HitlReason(code="MEDIUM_CONFIDENCE", agent="hitl_evaluator_agent", severity=Severity.MEDIUM,
                                  description=f"Confianza {agg.confidence:.2f} < {confidence_auto}"))
 
-    # 9. Mejoras de redacción propuestas → revisión posterior.
+    # 9. Historia propuesta por IA a partir de actas o notas: nunca pasa sin revisión humana.
+    if generated:
+        (stop if generated_requires_approval else review).append(HitlReason(
+            code="GENERATED_STORY", agent="story_generator_agent",
+            severity=Severity.HIGH if generated_requires_approval else Severity.MEDIUM,
+            description="Historia generada por IA a partir de los documentos del proyecto; "
+                        "el dueño del producto debe validarla."))
+
+    # 10. Mejoras de redacción propuestas → revisión posterior.
     if agg.suggested_changes_count and not story_approved:
         review.append(HitlReason(code="WORDING_IMPROVEMENT", agent="story_analyst_agent", severity=Severity.LOW,
                                  description=f"{agg.suggested_changes_count} mejora(s) de redacción propuesta(s)."))
