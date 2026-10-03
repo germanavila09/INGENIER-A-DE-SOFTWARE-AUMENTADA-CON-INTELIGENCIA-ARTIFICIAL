@@ -46,17 +46,33 @@ os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
 
 def verificar_entorno() -> None:
     """Avisa de los problemas típicos sin impedir que arranque la interfaz."""
+    import importlib
+
     import google.auth
     from google.auth.exceptions import DefaultCredentialsError
 
-    from adk_ing.bucket import BucketReader
+    from adk_ing.bucket import crear_fuente
     from adk_ing.config import get_settings
 
     s = get_settings()
-    print(f"Proyecto: {os.environ['GOOGLE_CLOUD_PROJECT']}  |  Bucket: gs://{s.bucket}/{s.prefix}")
+    local = os.getenv("DOCS_LOCAL_DIR", "").strip()
+    origen = f"carpeta local {local}" if local else f"gs://{s.bucket}/{s.prefix}"
+    print(f"Proyecto: {os.environ['GOOGLE_CLOUD_PROJECT']}  |  Documentos: {origen}")
 
     if not (ROOT / ".env").exists():
         print("  ! No hay .env; se usan valores por defecto (copia .env.example a .env para cambiarlos).")
+
+    faltan = []
+    for modulo, paquete in [("pypdf", "pypdf"), ("docx", "python-docx"), ("pptx", "python-pptx"), ("openpyxl", "openpyxl")]:
+        try:
+            importlib.import_module(modulo)
+        except ImportError:
+            faltan.append(paquete)
+    if faltan:
+        print(
+            f"  ! Faltan librerías para leer documentos: {', '.join(faltan)}. Ejecuta:\n"
+            f'      "{sys.executable}" -m pip install -e "{ROOT}"'
+        )
 
     try:
         google.auth.default()
@@ -66,18 +82,20 @@ def verificar_entorno() -> None:
             "      gcloud auth application-default login\n"
             f"      gcloud auth application-default set-quota-project {os.environ['GOOGLE_CLOUD_PROJECT']}"
         )
-        return
+        if not local:
+            return
 
     try:
-        objs = BucketReader().list(max_results=5)
-        print(f"  OK acceso al bucket ({len(objs)} objeto(s) en la primera página).")
-    except Exception as exc:  # Forbidden, NotFound, etc.
+        objs = crear_fuente().list(max_results=50)
+        print(f"  OK acceso a los documentos ({len(objs)} archivo(s) en la primera página).")
+    except Exception as exc:  # Forbidden, NotFound, carpeta inexistente, etc.
         detalle = str(exc).splitlines()[0][:200]
-        print(
-            f"  ! No se pudo listar gs://{s.bucket}: {detalle}\n"
-            "    Tu cuenta necesita roles/storage.objectViewer sobre el bucket. "
-            "La interfaz arrancará igual, pero el agente responderá con este error."
-        )
+        print(f"  ! No se pudo listar {origen}: {detalle}")
+        if not local:
+            print(
+                "    Tu cuenta necesita roles/storage.objectViewer sobre el bucket. "
+                "La interfaz arrancará igual, pero el agente responderá con este error."
+            )
 
 
 def main() -> None:

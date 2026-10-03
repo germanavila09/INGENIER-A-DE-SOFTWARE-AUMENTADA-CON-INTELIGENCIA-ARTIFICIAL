@@ -85,18 +85,20 @@ def test_safe_target_bloquea_path_traversal(tmp_path):
         _safe_target(tmp_path, "../fuera.txt")
 
 
-def test_herramientas_del_agente(monkeypatch):
+def test_indice_sobre_el_bucket(monkeypatch):
+    """El agente funciona igual sobre el bucket (cliente falso) que sobre una carpeta."""
+    from adk_ing.indice import IndiceDocumentos
     from agente_bucket import agent as mod
 
-    monkeypatch.setattr(mod, "_reader", BucketReader(bucket_name="adk_ing", prefix="", client=FakeClient()))
+    reader = BucketReader(bucket_name="adk_ing", prefix="", client=FakeClient())
+    monkeypatch.setattr(mod, "_indice", IndiceDocumentos(reader, ttl_segundos=0))
 
-    listado = mod.listar_archivos()
-    assert listado["status"] == "ok" and listado["total"] == 3
+    listado = mod.listar_documentos()
+    assert listado["fuente"] == "gs://adk_ing/" and listado["total"] == 3
+    assert {d["name"]: d["legible"] for d in listado["documentos"]}["imagenes/logo.png"] is False
 
-    texto = mod.leer_archivo("documentos/guia.md", max_caracteres=5)
-    assert texto["status"] == "ok" and texto["truncado"] is True
-
-    binario = mod.leer_archivo("imagenes/logo.png")
-    assert binario["status"] == "error"
+    r = mod.buscar_en_documentos("ñandú")
+    assert r["resultados"][0]["documento"] == "documentos/guia.md"
+    assert set(r["documentos_recien_indexados"]) == {"documentos/guia.md", "datos/tabla.csv"}
 
     assert mod.root_agent.name == "agente_bucket"
