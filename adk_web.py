@@ -66,15 +66,19 @@ def verificar_entorno() -> None:
     if not (ROOT / ".env").exists():
         print("  ! No hay .env; se usan valores por defecto (copia .env.example a .env para cambiarlos).")
 
+    if not SPB_HTML.exists():
+        print(f"  ! No está {SPB_HTML}: actualiza el repo (git pull) para tener la interfaz /spb.")
+
     faltan = []
-    for modulo, paquete in [("pypdf", "pypdf"), ("docx", "python-docx"), ("pptx", "python-pptx"), ("openpyxl", "openpyxl")]:
+    for modulo, paquete in [("pypdf", "pypdf"), ("docx", "python-docx"), ("pptx", "python-pptx"), ("openpyxl", "openpyxl"),
+                            ("yaml", "pyyaml"), ("multipart", "python-multipart")]:
         try:
             importlib.import_module(modulo)
         except ImportError:
             faltan.append(paquete)
     if faltan:
         print(
-            f"  ! Faltan librerías para leer documentos: {', '.join(faltan)}. Ejecuta:\n"
+            f"  ! Faltan librerías: {', '.join(faltan)}. Ejecuta:\n"
             f'      "{sys.executable}" -m pip install -e "{ROOT}"'
         )
 
@@ -113,18 +117,44 @@ def main() -> None:
     if not args.skip_checks:
         verificar_entorno()
 
-    url = f"http://{args.host}:{args.port}"
+    port = puerto_libre(args.host, args.port)
+    url = f"http://{args.host}:{port}"
 
     @asynccontextmanager
     async def lifespan(app):
-        print(f"\nADK Web listo en {url}/dev-ui  (Ctrl+C para detener)")
-        print(f"Smart Product Backlog en {url}/spb\n")
+        print(f"\nADK Web listo en {url}/dev-ui  (Ctrl+C para detener)", flush=True)
+        print(f"Smart Product Backlog en {url}/spb\n", flush=True)
         if not args.no_browser:
             threading.Timer(1.0, webbrowser.open, args=(f"{url}/spb",)).start()
         yield
 
-    app = crear_app(host=args.host, port=args.port, lifespan=lifespan)
-    uvicorn.run(app, host=args.host, port=args.port)  # sin --reload: no funciona en Windows
+    print("\nArrancando el servidor… (la primera vez puede tardar unos segundos)", flush=True)
+    try:
+        app = crear_app(host=args.host, port=port, lifespan=lifespan)
+    except Exception as exc:  # noqa: BLE001 — mensaje claro en lugar de un traceback largo
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(f"\nNo se pudo crear la aplicación: {type(exc).__name__}: {exc}\n"
+                 f'Reinstala las dependencias con: "{sys.executable}" -m pip install -e "{ROOT}"')
+    uvicorn.run(app, host=args.host, port=port)  # sin --reload: no funciona en Windows
+
+
+def puerto_libre(host: str, port: int) -> int:
+    """El puerto pedido o el siguiente libre (p. ej. si quedó abierta otra ejecución)."""
+    import socket
+
+    for p in range(port, port + 10):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, p))
+            except OSError:
+                if p == port:
+                    print(f"  ! El puerto {port} está ocupado (¿quedó abierta otra ejecución de adk_web.py "
+                          "en otra terminal?). Busco uno libre…")
+                continue
+        return p
+    sys.exit(f"No hay puertos libres entre {port} y {port + 9}. Cierra las otras ejecuciones o usa --port.")
 
 
 def crear_app(host: str = "127.0.0.1", port: int = 8000, lifespan=None, **kwargs):

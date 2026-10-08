@@ -1,0 +1,37 @@
+{
+  // Run and Debug (Ctrl+Shift+D) → elige la configuración → F5
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Smart Product Backlog (ADK Web)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/adk_web.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": { "PYTHONUTF8": "1" }
+    },
+    {
+      "name": "Smart Product Backlog (sin revisar credenciales)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/adk_web.py",
+      "args": ["--skip-checks"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": { "PYTHONUTF8": "1" }
+    },
+    {
+      "name": "Pruebas (pytest)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-q"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": { "PYTHONUTF8": "1" }
+    }
+  ]
+}

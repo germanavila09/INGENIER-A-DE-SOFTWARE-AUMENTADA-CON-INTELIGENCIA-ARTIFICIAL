@@ -20,6 +20,9 @@ dependencies = [
     # sistema multiagente
     "pyyaml>=6.0",
     "pydantic>=2.6",
+    # API y carga de archivos del Smart Product Backlog (/api, /spb)
+    "python-multipart>=0.0.9",
+    "uvicorn>=0.29",
 ]
 
 [project.optional-dependencies]
