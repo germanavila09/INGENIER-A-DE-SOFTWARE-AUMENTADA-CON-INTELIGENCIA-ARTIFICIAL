@@ -226,3 +226,20 @@ def test_backlog_muestra_las_generadas_que_faltan_por_evaluar(entorno):
     h = {x["id"]: x for x in client.get("/api/projects/SERVI_SINCHI/backlog").json()["historias"]}
     assert h["HU-IA-001"]["estado_ui"] == "revisar"
     assert h["HU-IA-002"]["estado_ui"] == "pendiente" and h["HU-IA-002"]["titulo"]
+
+
+def test_auditoria_registra_latencia_real_por_agente(entorno, tmp_path):
+    _, raiz, _ = entorno
+
+    class Lento(hu_fakes.ModeloSimulado):
+        async def generate_content_async(self, llm_request, stream=False):
+            await asyncio.sleep(0.05)
+            async for r in super().generate_content_async(llm_request, stream):
+                yield r
+
+    eng = HuEngine(HuSettings(input_uri=str(raiz), results_uri=str(tmp_path / "lento")), model=Lento())
+    eng.audit.emit_logs = False
+    asyncio.run(eng.analyze_project("PRJ002"))
+    lat = {e["agent"]: e["latency_ms"] for e in eng.results_store("PRJ002").read_jsonl("audit/audit_log.jsonl")
+           if e.get("event") == "agent_output" and e.get("latency_ms") is not None}
+    assert lat["story_analyst_agent"] >= 40 and lat["architecture_agent"] >= 40 and lat["qa_agent"] >= 40

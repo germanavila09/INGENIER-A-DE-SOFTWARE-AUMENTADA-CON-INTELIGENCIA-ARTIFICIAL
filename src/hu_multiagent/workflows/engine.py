@@ -515,12 +515,21 @@ class HuEngine:
             text=f"Analiza la historia {sid} del proyecto {session_state[K_PROJECT_ID]}.")])
         metrics: dict[str, dict] = defaultdict(lambda: {"tokens": defaultdict(int), "t0": None, "t1": None})
         cfg = RunConfig(max_llm_calls=self.settings.max_llm_calls_per_story)
+        # Latencia por agente con la hora de LLEGADA de los eventos: cada agente LLM emite un solo
+        # evento al terminar, así que su inicio es la llegada del evento anterior (para los agentes en
+        # paralelo, la del último agente secuencial).
+        previo = inicio_paralelo = time.monotonic()
         try:
             async for ev in self._story_runner.run_async(user_id="orchestrator", session_id=session.id,
                                                          new_message=msg, run_config=cfg):
+                ahora = time.monotonic()
                 m = metrics[ev.author]
-                m["t0"] = m["t0"] or ev.timestamp
-                m["t1"] = ev.timestamp
+                if m["t0"] is None:
+                    m["t0"] = inicio_paralelo if ev.author in PARALLEL_AGENTS else previo
+                m["t1"] = ahora
+                previo = ahora
+                if ev.author not in PARALLEL_AGENTS:
+                    inicio_paralelo = ahora
                 u = ev.usage_metadata
                 if u:
                     for k in ("prompt_token_count", "candidates_token_count", "total_token_count"):
@@ -544,7 +553,7 @@ class HuEngine:
             raise RecoverableError(f"Salida incompleta del flujo: faltan {', '.join(faltan)}")
         out_metrics = {}
         for agent, m in metrics.items():
-            lat = int(((m["t1"] or 0) - (m["t0"] or 0)) * 1000) if m["t0"] else None
+            lat = int((m["t1"] - m["t0"]) * 1000) if m["t0"] is not None and m["t1"] is not None else None
             out_metrics[agent] = {"latency_ms": lat, "tokens": dict(m["tokens"])}
         return result, out_metrics
 
