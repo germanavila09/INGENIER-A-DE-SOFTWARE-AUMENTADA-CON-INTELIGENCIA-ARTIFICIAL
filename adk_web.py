@@ -48,7 +48,7 @@ os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
 
 def verificar_entorno() -> None:
     """Avisa de los problemas típicos sin impedir que arranque la interfaz."""
-    import importlib
+    import importlib.util
 
     import google.auth
     from google.auth.exceptions import DefaultCredentialsError
@@ -69,12 +69,13 @@ def verificar_entorno() -> None:
     if not SPB_HTML.exists():
         print(f"  ! No está {SPB_HTML}: actualiza el repo (git pull) para tener la interfaz /spb.")
 
+    # find_spec solo comprueba que estén instaladas, sin cargarlas: importar openpyxl arrastra
+    # numpy y en Windows eso puede tardar mucho la primera vez (antivirus revisando sus DLL).
     faltan = []
-    for modulo, paquete in [("pypdf", "pypdf"), ("docx", "python-docx"), ("pptx", "python-pptx"), ("openpyxl", "openpyxl"),
-                            ("yaml", "pyyaml"), ("multipart", "python-multipart")]:
-        try:
-            importlib.import_module(modulo)
-        except ImportError:
+    for modulos, paquete in [(("pypdf",), "pypdf"), (("docx",), "python-docx"), (("pptx",), "python-pptx"),
+                             (("openpyxl",), "openpyxl"), (("yaml",), "pyyaml"),
+                             (("python_multipart", "multipart"), "python-multipart")]:
+        if not any(importlib.util.find_spec(m) for m in modulos):
             faltan.append(paquete)
     if faltan:
         print(
