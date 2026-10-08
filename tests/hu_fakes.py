@@ -66,6 +66,9 @@ def architecture(pid, sid) -> dict:
     out = {"story_id": sid, "summary": "Sin impacto relevante.", "impacts": [], "critical_changes": [],
            "recommendations": [], "risks": [], "status": "APPROVED", "requires_hitl": False, "hitl_reason": "",
            "confidence": 0.9}
+    if sid == "HU-IA-001":
+        out["impacts"] = [{"area": "ai_ml", "description": "Clasificación de coberturas con un modelo entrenado",
+                           "type": "INFERENCE", "source": "notas SINCHI"}]
     if pid == "PRJ001" and sid == "US-003":
         out.update({
             "summary": "Requiere migrar datos y retirar la base legada, en conflicto con ADR-001.",
@@ -98,12 +101,14 @@ def generator(pid, previas: bool) -> dict:
          "role": "analista ambiental", "need": "publicar mensualmente indicadores de coberturas de la tierra",
          "benefit": "monitorear cambios en la Amazonía", "acceptance_criteria": ["Se publica un indicador por mes"],
          "business_rules": [], "depends_on": [], "evidence": [ev("los indicadores se publican mensualmente")],
-         "open_questions": [], "confidence": 0.8},
+         "open_questions": [], "confidence": 0.8, "priority": "Alta",
+         "priority_reason": "Los documentos piden publicar cada mes."},
         {"story_id": "HU-IA-002", "title": "Elegir plataforma de procesamiento", "epic": "Infraestructura",
          "role": "líder técnico", "need": "decidir entre Google Earth Engine e infraestructura propia",
          "benefit": "definir la arquitectura del piloto", "acceptance_criteria": ["Queda registrada la decisión"],
          "business_rules": [], "depends_on": [], "evidence": [ev("Definir si la implementación será en Google Earth Engine")],
-         "open_questions": [_q("¿Quién toma la decisión de plataforma?", blocking=False)], "confidence": 0.7},
+         "open_questions": [_q("¿Quién toma la decisión de plataforma?", blocking=False)], "confidence": 0.7,
+         "priority": "media", "priority_reason": "Sin señales de urgencia."},
     ]
     if previas:
         stories.append({**stories[0], "story_id": "HU-IA-003", "title": "Alertas de deforestación",

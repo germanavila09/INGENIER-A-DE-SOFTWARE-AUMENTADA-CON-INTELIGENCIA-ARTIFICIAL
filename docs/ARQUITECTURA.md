@@ -252,12 +252,42 @@ Hay además un límite de llamadas LLM por historia (`RunConfig.max_llm_calls`).
 
 **Mínimo privilegio**
 
-- Quien lee la entrada solo tiene `roles/storage.objectViewer` sobre el bucket de entrada.
+- Quien lee la entrada solo tiene `roles/storage.objectViewer` sobre el bucket de entrada. Si se usa la carga de documentos del Smart Product Backlog, esa cuenta necesita además `roles/storage.objectCreator` (crear objetos, no borrarlos ni sobrescribir los de otros).
 - La escritura va únicamente al bucket de resultados (`roles/storage.objectUser`).
 - Para Gemini basta `roles/aiplatform.user`.
 - No hay credenciales en el código.
 
-## 10. Límites conocidos del MVP
+## 10. Interfaz Smart Product Backlog (front + API)
+
+`adk_web.py` monta en el mismo servidor de ADK Web la API `src/hu_multiagent/api.py` (`/api`) y el front `web/spb/index.html` (`/spb`). La API usa el mismo `HuEngine` que las herramientas del orquestador, así que lo que se decide en la interfaz lo ve el chat y viceversa.
+
+```mermaid
+flowchart LR
+    U[Dueño de producto] -->|/spb| F[Front SPB]
+    F -->|REST /api| A[API SPB]
+    F -->|/run_sse| O[orquestador_hu]
+    O -->|AgentTool| B[agente_documentos]
+    A --> E[HuEngine]
+    O --> E
+    A -->|carga y transcripción| IN[(gs://adk_ing)]
+    E -->|lectura| IN
+    E -->|estado, versiones, auditoría| OUT[(HU_RESULTS_URI)]
+```
+
+| Elemento del mockup | Dato del backend |
+|---|---|
+| Insumos y audios | `InputStorage.write_bytes` (única escritura en la entrada). Audio → Gemini → `<nombre>.transcripcion.txt`, clasificado como acta; la ingesta omite el audio y lee la transcripción |
+| Etapas de «Comprensión» | `HuEngine.progress[pid]`: `fuentes → historias → evaluacion → terminado` con historia actual y conteo |
+| HU-IA / HU-Tradicional | HU-IA si `architecture_agent` reporta un impacto en el área `ai_ml` |
+| Prioridad | `priority` + `priority_reason` del generador (recomendación, se muestra «sugerida»); un humano la cambia al refinar |
+| Aprobar / Refinar / Descartar | `HuEngine.human_action`: si hay decisión HITL pendiente usa `apply_decision`; si la historia ya está lista (nivel 0/1) la aprueba (versión `_human_approved`), la descarta (`READY → REJECTED`) o la reanaliza con la indicación (versión `_human_modified`, máximo `HU_MAX_REANALISIS`) |
+| Aprobar épica | `HuEngine.approve_epic`: aprueba solo las historias listas o para revisar; las que esperan decisión crítica quedan para decidirse una por una |
+| Validación | solicitudes HITL nivel 2, INVEST, casos de prueba de QA y preguntas abiertas |
+| Backlog y exportación | `generated/reports/backlog_report.json` (orden por dependencias) + estado de cada historia |
+
+Un proyecto no admite dos análisis a la vez (la API responde 409) y los análisis y refinamientos corren en segundo plano mientras la interfaz consulta el avance.
+
+## 11. Límites conocidos del MVP
 
 - El agrupamiento de archivos sueltos depende del prefijo del nombre. Para un control explícito, mueve los archivos a `projects/<carpeta>/` y agrega un `project.yaml`.
 
@@ -265,3 +295,6 @@ Hay además un límite de llamadas LLM por historia (`RunConfig.max_llm_calls`).
 - Las historias se procesan una tras otra. El paralelismo está dentro de cada historia (arquitectura ‖ QA).
 - La detección de duplicados y la de contradicciones entre historias corresponden al `requirements_validator_agent` (fase 2). El analista recibe la lista de las otras historias del proyecto para señalarlas.
 - La guardia HITL comprueba palabras de decisión en el mensaje, no entiende negaciones. Es una red de seguridad adicional a las instrucciones del orquestador.
+- La interfaz no tiene autenticación: el nombre de quien decide lo escribe el usuario. Para publicarla fuera del equipo local hay que ponerla detrás de IAP o de un proxy con identidad (fase 2) y tomar el usuario de ahí.
+- Los trabajos en segundo plano viven en el proceso: si se reinicia el servidor durante un análisis, la siguiente ejecución lo marca como interrumpido y lo retoma.
+- Audios de más de 20 MB no se transcriben en línea; hay que dividirlos o subir su transcripción.

@@ -2,13 +2,15 @@
 
 Proyecto base que consume el bucket de Cloud Storage **`gs://adk_ing`** (proyecto GCP `servi-modelos-ia-dev`) con [Google ADK](https://google.github.io/adk-docs/) y Gemini:
 
+- **Smart Product Backlog (`/spb`)**: interfaz web para el dueño de producto. Sube actas, notas y audios (se transcriben), lanza el análisis multiagente, muestra las historias propuestas con su evidencia, tipo (HU-IA / tradicional) y prioridad sugerida, y permite aprobar, refinar, descartar, aprobar por épica, decidir los puntos críticos (HITL) y exportar el backlog. Incluye un asistente que conversa con `orquestador_hu`.
 - **`orquestador_hu`**: sistema **multiagente** que descubre proyectos en el bucket, analiza sus historias de usuario (INVEST, ambigüedades, impacto de arquitectura, casos de prueba), detecta cuándo se necesita una decisión humana (HITL), se detiene y continúa tras la aprobación, con máquina de estados persistida, versionado y auditoría completa. Arquitectura en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 - **`agente_bucket`**: agente que busca, lee y responde preguntas sobre los documentos del bucket (PDF, Word, Excel, PowerPoint, CSV, texto), citando documento y página.
 - **`adk-ing`**: CLI y librería Python para listar, leer y sincronizar los objetos del bucket.
 
 ```
 .
-├── adk_web.py              # lanza ADK Web (python adk_web.py)
+├── adk_web.py              # lanza ADK Web + API (/api) + Smart Product Backlog (/spb)
+├── web/spb/index.html      # front del Smart Product Backlog
 ├── agents/                 # apps que muestra ADK Web
 │   ├── orquestador_hu/     # sistema multiagente de historias de usuario (root_agent = orquestador)
 │   └── agente_bucket/      # agente de preguntas sobre documentos
@@ -21,7 +23,8 @@ Proyecto base que consume el bucket de Cloud Storage **`gs://adk_ing`** (proyect
 │   ├── models/             # schemas Pydantic: proyecto, historia, contrato, HITL, estados
 │   ├── services/           # almacenamiento por proyecto, estado persistido, auditoría
 │   ├── tools/              # bucket, manifest/contexto, historias, herramientas HITL
-│   └── workflows/          # flujos ADK por proyecto e historia, motor, reportes
+│   ├── workflows/          # flujos ADK por proyecto e historia, motor, reportes
+│   └── api.py              # API REST que consume el front (/api)
 ├── src/adk_ing/
 │   ├── config.py           # variables de entorno / .env
 │   ├── bucket.py           # BucketReader (bucket) y CarpetaLocal (pruebas)
@@ -123,13 +126,29 @@ gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$SA --ro
 gcloud auth application-default login --impersonate-service-account=$SA
 ```
 
-### ADK Web con el agente del bucket
+### Smart Product Backlog (interfaz web)
 
 ```bash
 python adk_web.py                   # o botón Run en VS Code sobre adk_web.py
 ```
 
-Revisa credenciales y acceso a los documentos, levanta la interfaz en http://127.0.0.1:8000 y abre el navegador. Elige **agente_bucket** en el selector.
+Abre http://127.0.0.1:8000/spb. El mismo servidor sigue ofreciendo ADK Web en `/dev-ui`.
+
+| Paso | Qué hace | Con qué parte del backend |
+|---|---|---|
+| 1 · Insumos | Elegir o crear proyecto, subir PDF, DOCX, PPTX, XLSX, CSV, TXT/MD y audios MP3/WAV/M4A (hasta 20 MB se transcriben con Gemini y la transcripción se guarda junto al audio) | `POST /api/projects`, `POST /api/projects/{id}/files` |
+| 2 · Comprensión | Avance en vivo: fuentes, documentos normalizados, historias (escritas o generadas por IA) y evaluación multiagente historia por historia | `POST /api/projects/{id}/analyze` (en segundo plano), `GET …/status` |
+| 3 · Refinamiento | Tarjetas por épica con propuesta mejorada, original, evidencia, calidad, nivel HITL, tipo HU-IA (si arquitectura detecta impacto `ai_ml`) y prioridad sugerida. Aprobar, Refinar (los agentes reanalizan con tu indicación), Descartar, Aprobar épica (solo historias sin decisión crítica) y «¿Por qué?» | `GET …/backlog`, `POST …/stories/{sid}/decision`, `POST …/epics/approve`, `GET …/stories/{sid}/explain` |
+| 4 · Validación | Decisiones críticas (nivel 2) con motivo, riesgo, recomendación y preguntas bloqueantes; calidad INVEST; casos de prueba Dado/Cuando/Entonces; preguntas abiertas del proyecto | mismos endpoints |
+| 5 · Backlog | Resumen, orden por dependencias, avance por épica y exportación CSV (`;`, abre en Excel en español) o JSON | `GET …/export?formato=csv|json` |
+
+El botón **Asistente** conversa con `orquestador_hu` usando la API estándar de ADK (`/apps/orquestador_hu/users/{u}/sessions` y `/run_sse`), y muestra cuándo consulta al agente del bucket. Quien decide se registra con el nombre del campo «Decide» (encabezado `X-Usuario`) en la auditoría y en las versiones aprobadas.
+
+**Permisos:** subir documentos o crear proyectos desde la interfaz escribe en el bucket de entrada, así que la cuenta necesita `roles/storage.objectCreator` sobre `gs://adk_ing`. Sin ese permiso la interfaz muestra el error y se puede seguir subiendo con `gcloud storage cp`. Si abres `web/spb/index.html` directamente (sin servidor) funciona en **modo demo** con datos de ejemplo.
+
+### ADK Web con el agente del bucket
+
+`python adk_web.py` revisa credenciales y acceso a los documentos, levanta el servidor en http://127.0.0.1:8000 y abre el navegador en `/spb`. Para el chat de ADK entra a http://127.0.0.1:8000/dev-ui y elige **agente_bucket** u **orquestador_hu** en el selector.
 
 Opciones: `--port 8080`, `--no-browser`, `--skip-checks`. También funciona el comando estándar de ADK desde la raíz: `adk web agents` (o `adk run agents/agente_bucket` en la terminal).
 
@@ -171,7 +190,7 @@ Subir requiere `roles/storage.objectCreator`; el agente solo necesita lectura.
 pytest -q
 ```
 
-Las pruebas no requieren credenciales: usan los documentos de `docs_ejemplo/` y `ejemplos/projects/`, un cliente de GCS falso y modelos simulados que recorren los flujos reales de ADK. Para el orquestador cubren la política HITL, la máquina de estados, el flujo completo de PRJ001 (pausa, APPROVED, REJECTED, MODIFIED con reanálisis), el versionado, la auditoría, el aislamiento entre proyectos, los reintentos, los errores fatales, los límites y la guardia que impide decisiones no humanas. También corren en GitHub Actions en cada push.
+Las pruebas no requieren credenciales (incluidas las de la API del Smart Product Backlog: proyectos, carga y transcripción de audio, análisis en segundo plano, refinamiento, aprobación por épica, decisiones críticas y exportación): usan los documentos de `docs_ejemplo/` y `ejemplos/projects/`, un cliente de GCS falso y modelos simulados que recorren los flujos reales de ADK. Para el orquestador cubren la política HITL, la máquina de estados, el flujo completo de PRJ001 (pausa, APPROVED, REJECTED, MODIFIED con reanálisis), el versionado, la auditoría, el aislamiento entre proyectos, los reintentos, los errores fatales, los límites y la guardia que impide decisiones no humanas. También corren en GitHub Actions en cada push.
 
 ## Variables de entorno
 

@@ -50,7 +50,7 @@ KEYWORD_CATEGORY = [
     (("epica", "épica", "epic"), C.EPICS),
     (("arquitect", "architect"), C.ARCHITECTURE),
     (("acta", "decision", "decisión", "adr", "notas", "minuta", "reunion", "reunión", "sesion", "sesión",
-      "meeting", "comite", "comité"), C.DECISIONS),
+      "meeting", "comite", "comité", "transcrip"), C.DECISIONS),
     (("propuesta", "proposal", "alcance", "cronograma"), C.FUNCTIONAL),
     (("requisit", "requer", "requirement", "srs"), C.REQUIREMENTS),
     (("tecnic", "técnic", "technical"), C.TECHNICAL),
@@ -59,6 +59,7 @@ KEYWORD_CATEGORY = [
     (("test", "prueba"), C.TESTS),
 ]
 STORY_CATEGORIES = {C.USER_STORIES, C.BACKLOG}
+AUDIO_FORMATS = {"mp3", "wav", "m4a"}  # se leen a través de su transcripción (.transcripcion.txt)
 
 
 def classify(inner_path: str) -> C:

@@ -40,6 +40,7 @@ from ..services.state_service import StateService
 from ..services.storage_service import InputStorage, ProjectStore, make_backend
 from ..tools.gcs_tools import list_project_roots, read_project_file, root_folder_uri, root_label, scan_project_files, split_root
 from ..tools.project_tools import context_for_prompt, parse_project_info
+from ..tools.story_tools import _prioridad
 from ..agents.story_generator.agent import build_story_generator
 from ..agents.story_generator.prompt import K_GEN_CONTEXT, K_GEN_LIMIT, K_GEN_OUT, K_PREVIOUS
 from .project_workflow import build_project_workflow
@@ -102,6 +103,11 @@ class HuEngine:
         self._generation_runner = Runner(agent=self.story_generator, app_name="hu_story_generation", session_service=self._sessions)
         self._roots: dict[str, str] = {}
         self._lock = asyncio.Lock()
+        # Avance de la ejecución en curso por proyecto (lo consulta la API del front).
+        self.progress: dict[str, dict] = {}
+
+    def _progress(self, pid: str, **kw) -> None:
+        self.progress.setdefault(pid, {}).update(kw)
 
     # ================================================================ utilidades
     def results_store(self, project_id: str) -> ProjectStore:
@@ -156,9 +162,11 @@ class HuEngine:
             self._roots[info.project_id] = root
             nuevo = not self.state.exists(info.project_id)
             st = self.state.load(info.project_id)
-            st.project_name = info.project_name
-            st.root_path = root_folder_uri(self.input, root)
-            self.state.save(st)
+            ubicacion = root_folder_uri(self.input, root)
+            # Solo se escribe si algo cambió: así descubrir no pisa el estado de un análisis en curso.
+            if nuevo or st.project_name != info.project_name or st.root_path != ubicacion:
+                st.project_name, st.root_path = info.project_name, ubicacion
+                self.state.save(st)
             if nuevo:
                 self.audit.record(AuditEntry(event="project_discovered", project_id=info.project_id,
                                              agent="project_discovery_agent", source=st.root_path))
@@ -189,6 +197,8 @@ class HuEngine:
         summary = RunSummary(run_id=run_id, started_at=now_iso(), trigger=trigger)
         state.runs.append(summary)
         self.state.save(state)
+        self.progress[pid] = {"run_id": run_id, "etapa": "fuentes", "total": 0, "hechas": 0, "actual": "",
+                              "inicio": now_iso(), "fin": ""}
         self.audit.record(AuditEntry(event="run_started", run_id=run_id, project_id=pid, agent="orchestrator_agent",
                                      reason=trigger))
 
@@ -204,6 +214,7 @@ class HuEngine:
 
         # ---------------- 1b. sin historias escritas → el generador propone el backlog
         generacion = None
+        self._progress(pid, etapa="historias", documentos=len(docs))
         if not stories:
             try:
                 stories, generacion = await self._generated_stories(pid, context, docs, run_id, regenerate)
@@ -235,11 +246,13 @@ class HuEngine:
         candidatas = sorted(candidatas, key=orden.index)
         seleccion = candidatas[: self.settings.max_stories_per_run]
         summary.skipped = candidatas[self.settings.max_stories_per_run:]
+        self._progress(pid, etapa="evaluacion", total=len(seleccion), hechas=0, historias=len(stories))
 
         # ---------------- 3. flujo por historia
         if seleccion:
             self.state.transition_project(state, S.ANALYZING, "orchestrator", f"{len(seleccion)} historia(s)", run_id)
-        for sid in seleccion:
+        for i, sid in enumerate(seleccion):
+            self._progress(pid, actual=sid, hechas=i)
             try:
                 await self._process_story(state, by_id[sid], context, stories, docs, run_id, summary)
             except FatalError as exc:
@@ -308,7 +321,8 @@ class HuEngine:
                 description=f"Como {g.role} quiero {g.need} para {g.benefit}", acceptance_criteria=g.acceptance_criteria,
                 business_rules=g.business_rules, depends_on=[d.upper() for d in g.depends_on], status="generada por IA",
                 source=source, source_format="generated", origin="generated", evidence=g.evidence,
-                generation_confidence=g.confidence,
+                generation_confidence=g.confidence, priority=_prioridad(g.priority) or "Media",
+                priority_reason=g.priority_reason,
             )
             us.signature = stable_hash(us.model_dump(exclude={"signature", "source"}))
             stories.append(us)
@@ -486,7 +500,7 @@ class HuEngine:
             return story, ""
         mods = rec.human_modifications or {}
         upd = {k: mods[k] for k in ("title", "role", "need", "benefit", "description", "acceptance_criteria",
-                                    "business_rules", "depends_on") if k in mods}
+                                    "business_rules", "depends_on", "priority") if k in mods}
         if "narrative" in mods:
             upd["description"] = mods["narrative"]
         feedback = rec.human_feedback
@@ -587,6 +601,8 @@ class HuEngine:
         if state.state != target:
             self.state.transition_project(state, target, "orchestrator_agent", motivo, run_id)
         reports = build_reports(self.results_store(pid), state, context, stories)
+        if pid in self.progress and self.progress[pid].get("run_id") == run_id:
+            self._progress(pid, etapa="terminado", actual="", hechas=len(summary.processed), fin=now_iso())
         for r in state.runs:
             if r.run_id == run_id:
                 r.processed, r.ready, r.review, r.waiting = summary.processed, summary.ready, summary.review, summary.waiting
@@ -598,6 +614,7 @@ class HuEngine:
         return self._run_result(state, run_id, summary, reports)
 
     def _fail_project(self, pid, run_id, summary, exc, stories=None, context=None) -> dict:
+        self._progress(pid, etapa="error", fin=now_iso(), error=f"{type(exc).__name__}: {exc}"[:300])
         state = self.state.load(pid)
         state.last_error = f"{type(exc).__name__}: {exc}"[:500]
         if state.state != S.ERROR:
@@ -710,6 +727,111 @@ class HuEngine:
             async with self._lock:
                 resultado["reanudacion"] = self._finalize_after_decision(pid, decision_id)
         return resultado
+
+    async def human_action(self, project_id: str, story_id: str, action: str, comment: str = "",
+                           modifications: dict | None = None, decided_by: str = "usuario") -> dict:
+        """Decisión humana sobre una historia, tenga o no una solicitud HITL pendiente.
+
+        - Si la historia espera decisión (nivel 2) → apply_decision con su decision_id.
+        - Si ya está lista (nivel 0 o 1): APPROVED la marca revisada y aprobada (versión
+          _human_approved), REJECTED la descarta y MODIFIED la reanaliza con la corrección.
+        """
+        pid, _ = self._resolve(project_id)
+        sid = story_id.strip().upper()
+        state = self.state.load(pid)
+        if sid not in state.stories:
+            return {"status": "error", "mensaje": f"{sid} no existe en {pid}."}
+        rec = state.stories[sid]
+        if rec.state == S.WAITING_FOR_HUMAN and rec.pending_decision_id:
+            return await self.apply_decision(rec.pending_decision_id, action, comment, modifications, decided_by)
+        try:
+            dtype = HumanDecisionType(action.strip().upper())
+        except ValueError:
+            return {"status": "error", "mensaje": f"Acción inválida {action!r}."}
+        if rec.state != S.READY_FOR_IMPLEMENTATION:
+            return {"status": "error", "mensaje": f"{sid} está en {rec.state.value}; ahora no admite esa acción."}
+        if dtype == HumanDecisionType.NEEDS_MORE_INFORMATION:
+            return {"status": "error", "mensaje": "NEEDS_MORE_INFORMATION solo aplica a historias que esperan decisión."}
+
+        store = self.results_store(pid)
+        base = f"generated/user_stories/{sid}"
+        actor = f"human:{decided_by}"
+        mods = modifications or {}
+        original = store.read_json(f"{base}/original.json") or {}
+        resultado: dict = {"status": "ok", "story_id": sid, "decision": dtype.value}
+
+        if dtype == HumanDecisionType.MODIFIED:
+            if not mods and not comment:
+                return {"status": "error", "mensaje": "Para refinar indica qué cambiar."}
+            if rec.reanalysis_count >= self.settings.max_reanalysis:
+                return {"status": "error", "mensaje": f"Se alcanzó el límite de {self.settings.max_reanalysis} "
+                                                      f"refinamientos para {sid}. Apruébala o descártala."}
+        self.audit.record(AuditEntry(event="human_decision", project_id=pid, story_id=sid, agent=actor,
+                                     decision=dtype.value, human_approval=dtype.value, reason=comment[:1000],
+                                     after=stable_hash(mods) if mods else "", details={"sin_decision_hitl": True}))
+
+        if dtype == HumanDecisionType.APPROVED:
+            if rec.approved_by_human:
+                return {**resultado, "nota": "Ya estaba aprobada."}
+            proposed = store.read_json(f"{base}/proposed.json") or {}
+            approved = {**proposed, "version_label": "human_approved", "approved_by": decided_by,
+                        "approved_at": now_iso(), "comment": comment}
+            v, uri = store.write_version(f"{base}/versions", sid, "human_approved", approved)
+            store.write_json(f"{base}/approved.json", approved)
+            rec.approved_by_human, rec.review_pending = True, False
+            self.audit.record(AuditEntry(event="proposal", project_id=pid, story_id=sid, agent=actor,
+                                         before=stable_hash(original), after=stable_hash(approved),
+                                         human_approval="APPROVED", reason=comment, details={"version": v}))
+            resultado["version_aprobada"] = uri
+        elif dtype == HumanDecisionType.REJECTED:
+            self.state.transition_story(state, sid, S.REJECTED, actor, comment or "descartada")
+            store.write_json(f"{base}/rejected.json", {"decision": "REJECTED", "comment": comment,
+                                                       "decided_by": decided_by, "decided_at": now_iso()})
+        else:  # MODIFIED
+            human_version = {"story_id": sid, "project_id": pid, "version_label": "human_modified", "base": original,
+                             "modifications": mods, "comment": comment, "decided_by": decided_by, "decided_at": now_iso()}
+            v, uri = store.write_version(f"{base}/versions", sid, "human_modified", human_version)
+            rec.human_modifications, rec.human_feedback = mods, comment
+            rec.pending_reanalysis = True
+            rec.reanalysis_count += 1
+            resultado["version_humana"] = uri
+        self.state.save(state)
+
+        if dtype == HumanDecisionType.MODIFIED:
+            resultado["reanudacion"] = await self.analyze_project(pid, story_ids=[sid], trigger=f"refinamiento {sid}")
+        else:
+            async with self._lock:
+                self._refresh_reports(pid)
+        return resultado
+
+    async def approve_epic(self, project_id: str, epic: str, decided_by: str = "usuario") -> dict:
+        """Aprueba en bloque las historias de una épica que NO requieren decisión crítica."""
+        pid, _ = self._resolve(project_id)
+        state = self.state.load(pid)
+        store = self.results_store(pid)
+        aprobadas, criticas, ya = [], [], []
+        for sid, rec in state.stories.items():
+            orig = store.read_json(f"generated/user_stories/{sid}/original.json") or {}
+            if (orig.get("epic") or "Sin épica") != epic:
+                continue
+            if rec.state == S.WAITING_FOR_HUMAN:
+                criticas.append(sid)
+            elif rec.state == S.READY_FOR_IMPLEMENTATION and rec.approved_by_human:
+                ya.append(sid)
+            elif rec.state == S.READY_FOR_IMPLEMENTATION:
+                r = await self.human_action(pid, sid, "APPROVED", f"Aprobación de la épica {epic}", decided_by=decided_by)
+                if r.get("status") == "ok":
+                    aprobadas.append(sid)
+        return {"status": "ok", "epica": epic, "aprobadas": aprobadas, "ya_aprobadas": ya,
+                "requieren_decision_individual": criticas}
+
+    def _refresh_reports(self, pid: str) -> None:
+        store = self.results_store(pid)
+        ctx_data = store.read_json("generated/project_context.json")
+        context = ProjectContext.model_validate(ctx_data) if ctx_data else None
+        stories = [UserStory.model_validate(d) for sid in self.state.load(pid).stories
+                   if (d := store.read_json(f"generated/user_stories/{sid}/original.json"))]
+        build_reports(store, self.state.load(pid), context, stories)
 
     def _finalize_after_decision(self, pid: str, decision_id: str) -> dict:
         store = self.results_store(pid)

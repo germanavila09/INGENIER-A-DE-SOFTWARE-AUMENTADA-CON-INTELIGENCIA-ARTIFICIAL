@@ -34,6 +34,8 @@ class UserStory(BaseModel):
     source_format: str = ""
     signature: str = Field("", description="Firma del contenido de la historia (detecta cambios).")
     origin: str = Field("document", description="document = escrita en un documento; generated = propuesta por IA.")
+    priority: str = Field("", description="Alta, Media o Baja; vacío si no está definida.")
+    priority_reason: str = Field("", description="Por qué se sugiere esa prioridad (si la propuso la IA).")
     evidence: list[Statement] = Field(default_factory=list, description="Citas que respaldan una historia generada.")
     generation_confidence: float | None = None
 
@@ -203,6 +205,8 @@ class GeneratedStory(BaseModel):
     depends_on: list[str] = Field(default_factory=list)
     evidence: list[Statement] = Field(description="Citas breves de los documentos que respaldan la historia.")
     open_questions: list[Question] = Field(default_factory=list)
+    priority: str = Field(description="Alta, Media o Baja, según urgencia, valor o dependencia que muestren los documentos.")
+    priority_reason: str = Field(description="Justificación breve de la prioridad, basada en la evidencia.")
     confidence: float = Field(description="0-1: qué tan respaldada está la historia por los documentos.")
 
 

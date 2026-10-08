@@ -1,0 +1,1147 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Product Backlog</title>
+<link rel="icon" href="data:,">
+<style>
+:root{
+  --bg:#0a0f1f;--line:#24304d;--text:#f7f9ff;--muted:#93a0bc;--muted2:#77849f;
+  --blue:#6ea8ff;--blue2:#4b73ff;--violet:#9b7cff;--cyan:#60e8ff;--green:#64e1b4;--amber:#ffd27a;--red:#ff8397;
+  --shadow:0 30px 80px rgba(0,0,0,.38);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:radial-gradient(circle at 10% 0%,rgba(75,115,255,.20),transparent 28%),radial-gradient(circle at 90% 10%,rgba(155,124,255,.18),transparent 26%),linear-gradient(180deg,#0a0f1f,#0b1123 60%,#0c1225);
+  background-color:#0a0f1f;color:var(--text);font-size:13px}
+body{overflow-x:hidden}
+button,input,select,textarea{font:inherit}
+input[type="file"]{display:none}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.5}
+a{color:inherit}
+
+.shell{max-width:1440px;margin:auto;padding:18px}
+.app{min-height:calc(100vh - 36px);border:1px solid rgba(255,255,255,.08);border-radius:28px;background:linear-gradient(180deg,rgba(17,24,46,.88),rgba(9,15,31,.94));
+  box-shadow:var(--shadow);overflow:hidden;display:grid;grid-template-columns:86px 1fr;backdrop-filter:blur(20px)}
+.rail{border-right:1px solid rgba(255,255,255,.06);padding:24px 12px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;background:rgba(8,13,28,.54)}
+.brand{width:46px;height:46px;border-radius:16px;display:grid;place-items:center;font-weight:900;font-size:12px;background:linear-gradient(135deg,var(--blue2),var(--violet));box-shadow:0 12px 32px rgba(75,115,255,.28);margin-bottom:16px}
+.railbtn{width:48px;height:48px;border:0;border-radius:15px;background:transparent;color:#7d8aa7;display:grid;place-items:center;font-weight:900;font-size:12px;position:relative;transition:.22s}
+.railbtn:hover{background:#ffffff08;color:#d7deef}
+.railbtn.active{background:linear-gradient(180deg,#1c2748,#16213d);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 10px 30px rgba(0,0,0,.22)}
+.railbtn.active:after{content:"";position:absolute;left:-12px;width:3px;height:24px;border-radius:99px;background:linear-gradient(var(--cyan),var(--violet))}
+.railbtn .dot{position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px rgba(255,210,122,.7)}
+.rail-spacer{flex:1}
+.railbtn.chat{background:#172543;color:#9fc0ff}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.top{min-height:72px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 26px;border-bottom:1px solid rgba(255,255,255,.06)}
+.project-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.project-title > b{font-size:15px}
+.badge{font-size:11px;padding:5px 8px;border-radius:999px;background:#ffffff08;color:#9aa7c2;border:1px solid rgba(255,255,255,.07);white-space:nowrap}
+.badge.on{color:#79d7b4;background:#0e201c;border-color:#204338}
+.badge.off{color:#ffd27a;background:#2a2211;border-color:#4a3c1c}
+.top-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,.field{border:1px solid #2a385a;background:#0e162a;color:#dbe4f8;border-radius:11px;padding:8px 10px;font-size:12.5px}
+select{max-width:280px}
+.ghost,.solid{border-radius:11px;padding:9px 13px;font-size:12px;font-weight:800}
+.ghost{border:1px solid rgba(255,255,255,.1);background:#ffffff05;color:#c6d0e6}
+.ghost:hover{background:#ffffff0c}
+.solid{border:0;background:linear-gradient(135deg,var(--blue2),#6f63ff);color:white;box-shadow:0 10px 24px rgba(75,115,255,.22)}
+.user{display:flex;align-items:center;gap:6px}
+.user input{width:150px}
+
+.workspace{flex:1;padding:28px;position:relative}
+.page{display:none;animation:fade .26s ease}
+.page.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#8ea7df}
+.eyebrow:before{content:"";width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--violet));box-shadow:0 0 16px rgba(96,232,255,.55)}
+.hero{max-width:900px;margin:10px auto 24px;text-align:center}
+.hero h1{font-size:clamp(34px,5vw,64px);line-height:1;letter-spacing:-2px;margin:12px 0 12px}
+.hero h1 span{background:linear-gradient(90deg,#fff,#a8c5ff 46%,#c9adff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{max-width:720px;margin:auto;color:#a3b0cb;font-size:14.5px;line-height:1.6}
+.journey{max-width:1000px;margin:0 auto 24px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.jstep{padding:11px 12px;border-radius:13px;border:1px solid rgba(255,255,255,.06);background:#ffffff04;text-align:left;color:inherit}
+.jstep small{display:block;font-size:10px;color:#6f7c98;text-transform:uppercase;font-weight:900;letter-spacing:.45px}
+.jstep b{display:block;font-size:12.5px;margin-top:3px;color:#aeb9cf}
+.jstep span{display:block;font-size:11px;color:#77849f;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jstep.active{background:linear-gradient(180deg,#1b2749,#15203b);border-color:#3e527f}
+.jstep.active b{color:#fff}
+.jstep.done{background:#10241f;border-color:#224f41}.jstep.done b{color:#8ce8c5}
+
+.glass{background:linear-gradient(180deg,rgba(24,34,63,.90),rgba(18,26,49,.88));border:1px solid rgba(255,255,255,.07);border-radius:22px;box-shadow:0 20px 50px rgba(0,0,0,.18)}
+.panel-head{display:flex;justify-content:space-between;gap:16px;align-items:start;margin-bottom:14px;flex-wrap:wrap}
+.panel-head h3{margin:0;font-size:15px}
+.panel-head p{margin:4px 0 0;color:#8a97b3;font-size:12px;line-height:1.45}
+.muted{color:#8a97b3}
+.small{font-size:11.5px}
+
+/* --- paso 1 --- */
+.ingest-grid{max-width:1180px;margin:auto;display:grid;grid-template-columns:1.25fr .75fr;gap:16px}
+.upload,.sources,.side-card{padding:18px}
+.drop{min-height:220px;border:1px dashed #3b4d76;border-radius:18px;display:grid;place-items:center;text-align:center;padding:18px;
+  background:radial-gradient(circle at 50% 0%,rgba(75,115,255,.10),transparent 36%),linear-gradient(180deg,#10182f,#0f172c);position:relative;overflow:hidden;transition:.2s}
+.drop.over{border-color:var(--blue);background:#13203d}
+.orb{width:66px;height:66px;border-radius:22px;margin:auto;display:grid;place-items:center;background:linear-gradient(145deg,#26375f,#172343);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),0 16px 40px rgba(0,0,0,.24)}
+.orb svg{width:28px;height:28px}
+.drop h2{font-size:19px;margin:12px 0 5px}
+.drop p{font-size:12px;color:#8592ad;margin:0 0 12px}
+.filetypes{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:12px}
+.filetypes span{font-size:11px;padding:4px 8px;border-radius:999px;background:#ffffff06;color:#8d9ab5;border:1px solid rgba(255,255,255,.06)}
+.file{display:grid;grid-template-columns:40px 1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.file:last-child{border-bottom:0}
+.ficon{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-size:10px;font-weight:900;background:#321d2a;color:#ff97a8}
+.ficon.aud{background:#182746;color:#8fb2ff}.ficon.txt{background:#1d2a2f;color:#8fe0d0}.ficon.tab{background:#1c2a1d;color:#9be38f}
+.file b{display:block;font-size:13px;word-break:break-word}.file span.meta{font-size:11.5px;color:#7d8aa5}
+.pill{font-size:11px;font-weight:800;padding:4px 8px;border-radius:999px;background:#172543;color:#8eb6ff;border:1px solid #2a3f69;white-space:nowrap}
+.pill.ok{color:#68dbae;background:#10291f;border-color:#214a3d}
+.pill.warn{color:#ffd27a;background:#2a2211;border-color:#4a3c1c}
+.pill.err{color:#ff8ca0;background:#301a24;border-color:#552738}
+.pill.ai{background:#261f43;color:#c0adff;border-color:#40336d}
+.icon-btn{width:30px;height:30px;border-radius:9px;border:1px solid #552738;background:#301a24;color:#ff8ca0;font-size:15px;display:grid;place-items:center}
+.empty{padding:16px 0 4px;color:#7d8aa5;font-size:12px;text-align:center}
+.filelist{max-height:360px;overflow:auto;padding-right:4px}
+.options{display:grid;gap:8px;margin:14px 0}
+.check{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:#b9c4dc;line-height:1.4}
+.check input{margin-top:2px;accent-color:#6f63ff}
+.privacy{margin-top:12px;padding:11px;border-radius:11px;background:#0e201c;border:1px solid #204338;color:#86dcbc;font-size:12px;line-height:1.45}
+.warnbox{margin-top:12px;padding:11px;border-radius:11px;background:#2a2211;border:1px solid #4a3c1c;color:#ffd994;font-size:12px;line-height:1.45}
+
+/* --- paso 2 --- */
+.process-wrap{max-width:1060px;margin:auto}
+.big-status{padding:26px;text-align:center;margin-bottom:15px;position:relative;overflow:hidden}
+.loader{width:72px;height:72px;border-radius:50%;margin:4px auto 16px;border:2px solid #253253;border-top-color:var(--cyan);border-right-color:var(--violet);animation:spin 1.3s linear infinite}
+.bigicon{width:72px;height:72px;border-radius:50%;margin:4px auto 16px;display:grid;place-items:center;font-size:28px;font-weight:900}
+.bigicon.ok{background:#10291f;color:#6ee0b6;box-shadow:0 0 40px rgba(100,225,180,.18)}
+.bigicon.err{background:#301a24;color:#ff8ca0}
+.bigicon.idle{background:#172543;color:#8eb6ff}
+@keyframes spin{to{transform:rotate(360deg)}}
+.big-status h2{font-size:23px;margin:0 0 6px}
+.big-status p{font-size:13px;color:#93a0bc;margin:0 auto;max-width:640px;line-height:1.5}
+.stage-list{display:grid;gap:8px}
+.stage{padding:13px 14px;display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:12px;background:#ffffff03;border:1px solid rgba(255,255,255,.05);border-radius:14px}
+.stage .n{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:#172543;color:#8eb6ff;font-weight:900;font-size:11.5px}
+.stage.done .n{background:#102a22;color:#69ddb2}
+.stage.active{border-color:#3e527f;background:#141f3b}
+.stage.active .n{animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(110,168,255,.12)}}
+.stage b{display:block;font-size:13.5px}.stage span{font-size:12px;color:#8592ad;line-height:1.4}
+.stage .stat{font-size:11px;font-weight:900;padding:5px 8px;border-radius:999px;background:#13213d;color:#86a8ff;white-space:nowrap}
+.stage.done .stat{background:#10291f;color:#6ee0b6}
+.stage.wait .stat{background:#2a2211;color:#ffd27a}
+.minibar{height:6px;border-radius:99px;background:#0f1730;margin-top:7px;overflow:hidden;max-width:420px}
+.minibar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue2),var(--cyan));transition:width .4s}
+
+/* --- paso 3 --- */
+.review{max-width:1260px;margin:auto;display:grid;grid-template-columns:280px 1fr;gap:14px}
+.epics{padding:14px;align-self:start;position:sticky;top:12px}
+.epic{width:100%;text-align:left;border:1px solid transparent;background:transparent;color:#a8b4cd;border-radius:12px;padding:11px;margin-bottom:6px}
+.epic:hover{background:#ffffff05}
+.epic.active{background:linear-gradient(180deg,#1b2748,#15213d);border-color:#35476f;color:#fff}
+.epic b{display:block;font-size:13px}.epic span{font-size:11.5px;color:#7a87a2}
+.epic .bar{margin-top:7px}
+.storyarea{padding:16px;min-width:0}
+.storyhead{display:flex;justify-content:space-between;align-items:end;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+.storyhead h2{font-size:21px;margin:0}
+.storyhead p{font-size:12px;color:#8592ad;margin:4px 0 0}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.filters button{border-radius:999px;padding:6px 11px;font-size:11.5px;font-weight:800;border:1px solid rgba(255,255,255,.08);background:#ffffff04;color:#a8b4cd}
+.filters button.active{background:#1c2748;border-color:#3e527f;color:#fff}
+.story{border:1px solid rgba(255,255,255,.07);border-radius:17px;padding:15px;margin-bottom:11px;background:linear-gradient(180deg,#141d36,#11192f);transition:.2s}
+.story.st-decision{border-color:#5a3a4a;box-shadow:inset 3px 0 0 #ff8397}
+.story.st-revisar{box-shadow:inset 3px 0 0 #ffd27a}
+.story.st-aprobada{box-shadow:inset 3px 0 0 #64e1b4}
+.story.st-descartada{opacity:.45}
+.story.st-analizando{opacity:.75}
+.storytop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.story h4{font-size:14.5px;margin:0 0 7px;line-height:1.35}
+.story h4 .sid{color:#8ea7df}
+.story p{font-size:13px;line-height:1.55;color:#aab6ce;margin:0}
+.chips{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;max-width:46%}
+.kind{font-size:11px;font-weight:900;padding:5px 8px;border-radius:999px;background:#261f43;color:#c0adff;white-space:nowrap;border:1px solid transparent}
+.kind.trad{background:#162742;color:#9cc0ff}
+.kind.orig{background:#1d2532;color:#b7c3d9}
+.kind.gen{background:#20203a;color:#d5c8ff;border-color:#40336d}
+.prio{font-size:11px;font-weight:900;padding:5px 8px;border-radius:999px;background:#172543;color:#8eb6ff;white-space:nowrap}
+.prio.Alta{background:#2a2211;color:#f3c766}.prio.Baja{background:#18222b;color:#9fb5c8}
+.st{font-size:11px;font-weight:900;padding:5px 8px;border-radius:999px;white-space:nowrap}
+.st.lista{background:#10291f;color:#6be0b5}.st.revisar{background:#2a2211;color:#ffd27a}.st.decision{background:#3a1b27;color:#ff9db0}
+.st.aprobada{background:#0f3326;color:#7ff0c4}.st.descartada{background:#2a1d24;color:#c48a98}.st.analizando,.st.pendiente{background:#172543;color:#8eb6ff}.st.error{background:#3a1b27;color:#ff8ca0}
+.crit{margin:10px 0 0;padding:0 0 0 18px;color:#aab6ce;font-size:12.5px;line-height:1.55}
+.meta-line{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11.5px;color:#8592ad}
+.meta-line b{color:#c9d3e8}
+.source{margin-top:10px;padding:10px;border-radius:10px;background:#0d1428;border:1px solid #202c48;color:#8794ae;font-size:12px;line-height:1.5}
+.source b{color:#b9c5dd}
+.source q{color:#c3cde2}
+.hitlbox{margin-top:10px;padding:11px;border-radius:11px;font-size:12.5px;line-height:1.5}
+.hitlbox.decision{background:#2b1520;border:1px solid #5a3045;color:#ffc2cf}
+.hitlbox.revisar{background:#2a2211;border:1px solid #4a3c1c;color:#ffe2a3}
+.hitlbox b{color:#fff}
+.hitlbox ul{margin:6px 0 0;padding-left:18px}
+.toggle{background:none;border:0;color:#8eb6ff;font-size:12px;font-weight:800;padding:6px 0 0}
+.original{display:none;margin-top:8px;padding:10px;border-radius:10px;border:1px dashed #2a385a;color:#9aa7c1;font-size:12.5px;line-height:1.5}
+.original.show{display:block}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.actions button{border-radius:9px;padding:8px 11px;font-size:12px;font-weight:900}
+.ok{background:#10291f;color:#6be0b5;border:1px solid #214a3d}
+.ref{background:#172543;color:#8eb6ff;border:1px solid #2a3f69}
+.no{background:#301a24;color:#ff8ca0;border:1px solid #552738}
+.info{background:#2a2211;color:#ffd27a;border:1px solid #4a3c1c}
+.why{background:transparent;color:#a8b4cd;border:1px solid rgba(255,255,255,.1)}
+.refinebox{display:none;margin-top:10px;gap:8px;grid-template-columns:1fr 150px auto;align-items:start}
+.refinebox.show{display:grid}
+.refinebox textarea,.refinebox select{width:100%;border:1px solid #2a385a;background:#0e162a;color:#dbe4f8;border-radius:10px;padding:9px;font-size:12.5px;resize:vertical;max-width:none}
+.refinebox .err{grid-column:1/-1;color:#ff8ca0;font-size:12px;display:none}
+.refinebox .err.show{display:block}
+.refinebox .hint{grid-column:1/-1;color:#7d8aa5;font-size:11.5px}
+.bar{height:7px;border-radius:999px;background:#11182c;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--blue2),var(--cyan))}
+
+/* --- paso 4 --- */
+.val-wrap{max-width:1220px;margin:auto;display:grid;gap:14px}
+.val-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}
+.box{padding:16px}
+.qtable{width:100%;border-collapse:collapse;font-size:12.5px}
+.qtable th{text-align:left;font-size:11px;color:#7d8aa5;text-transform:uppercase;letter-spacing:.4px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.07)}
+.qtable td{padding:9px 6px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
+.invest{display:flex;gap:3px}
+.invest span{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:10.5px;font-weight:900;background:#172543;color:#8eb6ff}
+.invest span.lo{background:#3a1b27;color:#ff9db0}.invest span.hi{background:#10291f;color:#6be0b5}
+details.tc{border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#ffffff03}
+details.tc summary{cursor:pointer;font-weight:800;font-size:13px}
+.gwt{display:grid;grid-template-columns:70px 1fr;gap:4px 10px;font-size:12.5px;margin-top:8px;color:#aab6ce}
+.gwt b{color:#8ea7df}
+.qlist{margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;color:#b9c4dc}
+
+/* --- paso 5 --- */
+.backlog-wrap{max-width:1220px;margin:auto}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.statcard{padding:14px}
+.statcard small{display:block;font-size:11px;color:#7a87a2;text-transform:uppercase;font-weight:900;letter-spacing:.45px}
+.statcard b{display:block;font-size:28px;margin-top:3px}
+.statcard span{font-size:11.5px;color:#8592ad}
+.final-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}
+.list,.summary{padding:16px}
+.row{display:grid;grid-template-columns:92px 1fr 104px 66px 118px;gap:8px;align-items:center;padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.05);border-radius:8px;cursor:pointer}
+.row:hover{background:#ffffff05}
+.row:last-child{border-bottom:0}
+.row b{font-size:12.5px}.row .t{font-size:12.5px;color:#c3cde2}
+.row .sub{display:block;font-size:11px;color:#7d8aa5}
+.summary h3{font-size:14px;margin:0 0 12px}
+.epicbar{margin-bottom:12px}
+.epicbar b{display:flex;justify-content:space-between;font-size:12.5px}
+.epicbar b span{color:#8592ad;font-weight:700}
+.export{display:flex;gap:6px}
+.export a{text-decoration:none}
+
+.footer-note{text-align:center;color:#6b7893;font-size:11.5px;margin-top:16px}
+.toast{position:fixed;left:50%;bottom:24px;background:#111a31;border:1px solid #2a395b;color:#fff;padding:11px 14px;border-radius:11px;font-size:12.5px;box-shadow:0 16px 40px rgba(0,0,0,.34);opacity:0;transform:translate(-50%,10px);transition:.2s;z-index:300;max-width:min(520px,92vw);pointer-events:none}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.err{border-color:#552738;color:#ffc2cf}
+
+/* --- asistente y modales --- */
+.drawer{position:fixed;top:0;right:0;height:100vh;width:min(440px,100vw);background:#0d1428;border-left:1px solid #24304d;box-shadow:-30px 0 80px rgba(0,0,0,.45);
+  transform:translateX(105%);transition:.25s;z-index:200;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer header{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;justify-content:space-between;align-items:start;gap:10px}
+.drawer header b{font-size:14.5px}
+.drawer header p{margin:3px 0 0;font-size:11.5px;color:#8592ad;line-height:1.4}
+.msgs{flex:1;overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:9px}
+.msg{max-width:92%;padding:10px 12px;border-radius:13px;font-size:13px;line-height:1.5;word-wrap:break-word}
+.msg.me{align-self:flex-end;background:#1f2d55;color:#e7edff;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:#141f3b;border:1px solid #24304d;color:#d6def0;border-bottom-left-radius:4px}
+.msg.bot small{display:block;color:#7d8aa5;font-size:10.5px;margin-bottom:3px;font-weight:800}
+.msg.err{align-self:stretch;background:#2b1520;border:1px solid #5a3045;color:#ffc2cf;font-size:12px}
+.msg code{background:#0a1022;padding:1px 4px;border-radius:4px;font-size:12px}
+.tool{align-self:flex-start;font-size:11px;font-weight:800;color:#a8b4cd;padding:4px 9px;border-radius:999px;border:1px dashed #33456e;background:#0f1832}
+.tool.done{color:#6be0b5;border-color:#214a3d}
+.sugs{display:flex;gap:6px;flex-wrap:wrap;padding:0 18px 10px}
+.sugs button{font-size:11.5px;border-radius:999px;padding:6px 10px;border:1px solid #2a3f69;background:#13203d;color:#a9c4ff}
+.composer{padding:12px 18px 18px;border-top:1px solid rgba(255,255,255,.07);display:grid;grid-template-columns:1fr auto;gap:8px}
+.composer textarea{border:1px solid #2a385a;background:#0e162a;color:#dbe4f8;border-radius:11px;padding:10px;font-size:13px;resize:none;height:62px}
+.typing{align-self:flex-start;color:#8592ad;font-size:12px}
+.typing:after{content:"…";animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.2}}
+.scrim{position:fixed;inset:0;background:rgba(3,6,15,.6);z-index:150;display:none}
+.scrim.show{display:block}
+.modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,94vw);max-height:86vh;overflow:auto;z-index:250;padding:20px;display:none}
+.modal.show{display:block}
+.modal h3{margin:0 0 4px;font-size:17px}
+.timeline{list-style:none;margin:10px 0 0;padding:0;font-size:12.5px}
+.timeline li{padding:7px 0 7px 14px;border-left:2px solid #2a385a;color:#aab6ce}
+.timeline li b{color:#dfe6f6}
+.agentcard{padding:10px;border-radius:11px;background:#0d1428;border:1px solid #202c48;margin-top:8px;font-size:12.5px;line-height:1.5;color:#aab6ce}
+.form{display:grid;gap:10px;margin-top:12px}
+.form label{font-size:12px;color:#a8b4cd;display:grid;gap:5px}
+.form .field{width:100%}
+
+@media(max-width:1000px){
+  .app{grid-template-columns:1fr}
+  .rail{display:none}
+  .ingest-grid,.review,.final-grid,.val-grid{grid-template-columns:1fr}
+  .epics{position:static}
+  .stats{grid-template-columns:1fr 1fr}
+  .chips{max-width:none;justify-content:flex-start}
+  .storytop{flex-direction:column}
+}
+@media(max-width:640px){
+  .shell{padding:0}.app{border-radius:0;min-height:100vh}
+  .workspace{padding:18px 14px}.top{padding:10px 14px}
+  .journey{grid-template-columns:repeat(5,1fr);gap:4px}
+  .jstep{padding:8px 6px}.jstep span{display:none}.jstep b{font-size:11px}
+  .row{grid-template-columns:80px 1fr}
+  .row .mobilehide{display:none}
+  .refinebox{grid-template-columns:1fr}
+  .user input{width:110px}
+  select{max-width:190px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="app">
+    <aside class="rail">
+      <div class="brand">SPB</div>
+      <button class="railbtn" data-go="0" title="Insumos">01</button>
+      <button class="railbtn" data-go="1" title="Comprensión">02</button>
+      <button class="railbtn" data-go="2" title="Refinamiento">03</button>
+      <button class="railbtn" data-go="3" title="Validación">04</button>
+      <button class="railbtn" data-go="4" title="Backlog">05</button>
+      <div class="rail-spacer"></div>
+      <button class="railbtn chat" data-act="chat" title="Asistente (orquestador_hu)">IA</button>
+    </aside>
+
+    <main class="main">
+      <header class="top">
+        <div class="project-title">
+          <b>Smart Product Backlog</b>
+          <select id="projSel" aria-label="Proyecto"></select>
+          <button class="ghost" data-act="new-project" title="Crear un proyecto nuevo">+ Proyecto</button>
+          <span class="badge" id="projState">—</span>
+          <span class="badge" id="conn">Conectando…</span>
+        </div>
+        <div class="top-actions">
+          <label class="user"><span class="muted small">Decide:</span><input class="field" id="userName" maxlength="60" placeholder="Tu nombre"></label>
+          <button class="ghost" data-act="chat">Asistente</button>
+          <button class="solid" data-act="next">Continuar</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <!-- PASO 1 · INSUMOS -->
+        <div class="page active" id="p0">
+          <div class="hero">
+            <div class="eyebrow">Paso 1 · Insumos</div>
+            <h1><span>Trae la conversación.</span><br>Nosotros encontramos el producto.</h1>
+            <p>Actas, notas, propuestas o grabaciones de reunión. Los audios se transcriben y todo queda en el bucket del proyecto para que los agentes lo lean.</p>
+          </div>
+          <div class="journey" data-journey></div>
+          <div class="ingest-grid">
+            <div class="glass upload">
+              <div class="panel-head">
+                <div><h3>Agregar fuentes</h3><p id="destHint">Se guardan en la carpeta del proyecto.</p></div>
+                <button class="ghost" data-act="pick">+ Agregar</button>
+              </div>
+              <div class="drop" id="drop">
+                <div>
+                  <div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="#bcd2ff" stroke-width="1.6"><path d="M12 16V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></div>
+                  <h2>Suelta aquí tu contexto</h2>
+                  <p>o elige los archivos desde tu equipo</p>
+                  <button class="solid" data-act="pick">Seleccionar archivos</button>
+                  <input id="fileInput" type="file" multiple accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.html,.json,.yaml,.yml,.mp3,.wav,.m4a">
+                  <div class="filetypes"><span>PDF</span><span>DOCX</span><span>PPTX</span><span>XLSX/CSV</span><span>TXT/MD</span><span>MP3 · WAV · M4A</span></div>
+                </div>
+              </div>
+              <div id="pending"></div>
+              <button class="solid" id="uploadBtn" style="width:100%;margin-top:12px;display:none" data-act="upload">Subir archivos</button>
+            </div>
+
+            <div class="glass side-card">
+              <div class="panel-head">
+                <div><h3>Fuentes del proyecto</h3><p id="srcCount">—</p></div>
+                <button class="ghost" data-act="reload-files" title="Volver a leer el bucket">↻</button>
+              </div>
+              <div class="filelist" id="sources"></div>
+              <div class="options">
+                <label class="check"><input type="checkbox" id="optRegen"> <span>Volver a generar las historias aunque los documentos no hayan cambiado</span></label>
+                <label class="check"><input type="checkbox" id="optForce"> <span>Reanalizar también las historias que ya no cambiaron</span></label>
+              </div>
+              <button class="solid" style="width:100%" data-act="analyze">Analizar proyecto →</button>
+              <div class="privacy">Cada proyecto se analiza solo con sus propios documentos. Las decisiones críticas siempre esperan tu aprobación.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 2 · COMPRENSIÓN -->
+        <div class="page" id="p1">
+          <div class="hero" style="margin-top:8px">
+            <div class="eyebrow">Paso 2 · Comprensión</div>
+            <h1 style="font-size:clamp(32px,4.4vw,52px)"><span>Estamos leyendo entre líneas.</span></h1>
+          </div>
+          <div class="journey" data-journey></div>
+          <div class="process-wrap">
+            <div class="glass big-status" id="bigStatus"></div>
+            <div class="stage-list" id="stages"></div>
+            <div style="display:flex;justify-content:center;gap:8px;margin-top:15px">
+              <button class="ghost" data-go="0">← Insumos</button>
+              <button class="solid" data-go="2" id="seeProposal">Ver propuesta →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 3 · REFINAMIENTO -->
+        <div class="page" id="p2">
+          <div class="hero" style="margin:8px auto 18px">
+            <div class="eyebrow">Paso 3 · Refinamiento</div>
+            <h1 style="font-size:clamp(32px,4.4vw,50px)"><span>La IA propone. Tú decides.</span></h1>
+          </div>
+          <div class="journey" data-journey></div>
+          <div class="review">
+            <aside class="glass epics" id="epics"></aside>
+            <div class="glass storyarea">
+              <div class="storyhead">
+                <div><h2 id="epicTitle">—</h2><p id="epicSub"></p></div>
+                <button class="ghost" data-act="approve-epic" id="approveEpic">Aprobar épica</button>
+              </div>
+              <div class="filters" id="filters"></div>
+              <div id="stories"></div>
+              <div style="display:flex;justify-content:flex-end;margin-top:10px">
+                <button class="solid" data-go="3">Ir a validación →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 4 · VALIDACIÓN -->
+        <div class="page" id="p3">
+          <div class="hero" style="margin:8px auto 18px">
+            <div class="eyebrow">Paso 4 · Validación</div>
+            <h1 style="font-size:clamp(32px,4.4vw,50px)"><span>Lo crítico pasa por tus manos.</span></h1>
+            <p>Seguridad, datos sensibles, migraciones, cambios de arquitectura o baja confianza: aquí decides tú, con la evidencia de cada agente.</p>
+          </div>
+          <div class="journey" data-journey></div>
+          <div class="val-wrap">
+            <div class="glass box">
+              <div class="panel-head"><div><h3>Decisiones que te esperan</h3><p id="decSub"></p></div></div>
+              <div id="decisions"></div>
+            </div>
+            <div class="val-grid">
+              <div class="glass box">
+                <div class="panel-head"><div><h3>Calidad por historia</h3><p>INVEST (0–5 por criterio), calidad 0–100 calculada en código y confianza de los agentes.</p></div></div>
+                <div style="overflow:auto"><table class="qtable" id="quality"></table></div>
+              </div>
+              <div class="glass box">
+                <div class="panel-head"><div><h3>Casos de prueba propuestos</h3><p>Generados por el agente de QA a partir de los criterios de aceptación.</p></div></div>
+                <div id="tests"></div>
+              </div>
+            </div>
+            <div class="val-grid">
+              <div class="glass box"><h3 style="margin:0 0 10px;font-size:15px">Preguntas abiertas del proyecto</h3><div id="openQ"></div></div>
+              <div class="glass box"><h3 style="margin:0 0 10px;font-size:15px">Decisiones encontradas en los documentos</h3><div id="docDec"></div></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end"><button class="solid" data-go="4">Ver backlog →</button></div>
+          </div>
+        </div>
+
+        <!-- PASO 5 · BACKLOG -->
+        <div class="page" id="p4">
+          <div class="hero" style="margin:8px auto 18px">
+            <div class="eyebrow">Paso 5 · Backlog</div>
+            <h1 style="font-size:clamp(32px,4.4vw,52px)"><span>Del contexto a decisiones accionables.</span></h1>
+          </div>
+          <div class="journey" data-journey></div>
+          <div class="backlog-wrap">
+            <div class="stats" id="stats"></div>
+            <div class="final-grid">
+              <div class="glass list">
+                <div class="panel-head">
+                  <div><h3>Smart Product Backlog</h3><p>Orden recomendado por dependencias · clic en una historia para revisarla</p></div>
+                  <div class="export"><a class="ghost" id="expCsv" href="#" download>CSV</a><a class="solid" id="expJson" href="#" download>JSON</a></div>
+                </div>
+                <div id="rows"></div>
+              </div>
+              <div class="glass summary">
+                <h3>Avance por épica</h3>
+                <div id="bars"></div>
+                <h3 style="margin-top:18px">Resumen del proyecto</h3>
+                <p class="muted" id="projSummary" style="font-size:12.5px;line-height:1.55;margin:0"></p>
+                <div class="privacy" style="margin-top:16px">Cada HU conserva su fuente original, sus versiones y el historial de revisión humana (auditoría en el bucket de resultados).</div>
+              </div>
+            </div>
+            <div class="footer-note" id="footer"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- Asistente: conversa con el agente orquestador_hu de ADK -->
+<aside class="drawer" id="drawer" aria-label="Asistente">
+  <header>
+    <div><b>Asistente del proyecto</b><p>Conversa con <code>orquestador_hu</code>. Él consulta al agente de documentos del bucket y explica cada decisión.</p></div>
+    <button class="ghost" data-act="close-chat" aria-label="Cerrar">✕</button>
+  </header>
+  <div class="msgs" id="msgs"></div>
+  <div class="sugs" id="sugs"></div>
+  <div class="composer">
+    <textarea id="chatInput" placeholder="Pregunta sobre el proyecto, una historia o un documento…"></textarea>
+    <button class="solid" data-act="send">Enviar</button>
+  </div>
+</aside>
+
+<div class="scrim" id="scrim"></div>
+<div class="glass modal" id="modal"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const API = '/api';
+const CHAT_APP = 'orquestador_hu';
+const PAGES = ['Insumos', 'Comprensión', 'Refinamiento', 'Validación', 'Backlog'];
+const ETAPAS = ['fuentes', 'historias', 'evaluacion', 'terminado'];
+const ESTADOS = {lista: 'Lista', revisar: 'Revisar', decision: 'Requiere decisión', aprobada: 'Aprobada',
+  descartada: 'Descartada', analizando: 'Analizando…', pendiente: 'Pendiente', error: 'Error'};
+const CATEGORIAS = {project_file: 'Proyecto', readme: 'Descripción', requirements: 'Requisitos', user_stories: 'Historias', epics: 'Épicas',
+  acceptance_criteria: 'Criterios', functional: 'Funcional', technical: 'Técnico', architecture: 'Arquitectura', backlog: 'Backlog',
+  decisions: 'Actas y decisiones', dependencies: 'Dependencias', tests: 'Pruebas', other: 'Otro'};
+const ESTADO_PROYECTO = {DISCOVERED: 'sin analizar', INGESTING: 'leyendo fuentes', CONTEXT_BUILDING: 'armando contexto', ANALYZING: 'analizando',
+  WAITING_FOR_HUMAN: 'esperando tus decisiones', READY_FOR_IMPLEMENTATION: 'listo', COMPLETED: 'al día', ERROR: 'con error'};
+const S = {online: false, demo: false, health: null, user: 'usuario', projects: [], pid: null, files: [], pending: [],
+  job: {estado: 'inactivo'}, progreso: null, proyecto: null, backlog: null, epic: '__all', filter: 'todas', page: 0,
+  pollTimer: null, lastJob: null, chat: {session: null, pidCtx: null, busy: false}};
+
+// ------------------------------------------------------------------ utilidades
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const enc = encodeURIComponent;
+const pct = v => v == null ? '—' : Math.round(v * 100) + '%';
+const num = v => v == null ? '—' : (Math.round(v * 10) / 10).toString();
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+function toast(msg, err = false) {
+  const t = $('#toast'); t.textContent = msg; t.classList.toggle('err', err); t.classList.add('show');
+  clearTimeout(window._t); window._t = setTimeout(() => t.classList.remove('show'), err ? 5200 : 2600);
+}
+function md(text) { // texto del agente → HTML seguro (negritas, código y saltos de línea)
+  return esc(text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^\s*[-*] /gm, '• ').replace(/\n/g, '<br>');
+}
+function size(b) { if (!b) return '0 KB'; const u = ['B', 'KB', 'MB', 'GB']; const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), 3); return (b / 1024 ** i).toFixed(i ? 1 : 0) + ' ' + u[i]; }
+function kindOf(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  if (['mp3', 'wav', 'm4a'].includes(ext)) return {cls: 'aud', label: 'AUD', type: 'Audio'};
+  if (['xlsx', 'xlsm', 'csv', 'tsv'].includes(ext)) return {cls: 'tab', label: ext.toUpperCase().slice(0, 4), type: 'Tabla'};
+  if (['txt', 'md', 'json', 'yaml', 'yml', 'html'].includes(ext)) return {cls: 'txt', label: ext.toUpperCase().slice(0, 4), type: 'Texto'};
+  return {cls: '', label: (ext.toUpperCase().slice(0, 4) || 'DOC'), type: 'Documento'};
+}
+
+async function api(path, opts = {}) {
+  if (S.demo) return demoApi(path, opts);
+  const headers = {'X-Usuario': enc(S.user || 'usuario')};
+  let body = opts.body;
+  if (body && !(body instanceof FormData)) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
+  const r = await fetch(API + path, {method: opts.method || 'GET', headers, body});
+  let data = null; try { data = await r.json(); } catch (e) { /* sin cuerpo */ }
+  if (!r.ok) {
+    let d = data && (data.detail || data.mensaje);
+    if (Array.isArray(d)) d = d.map(x => x.msg).join('; ');
+    throw new Error(d || `Error ${r.status}`);
+  }
+  return data;
+}
+
+// ------------------------------------------------------------------ navegación
+function go(n) {
+  S.page = Math.max(0, Math.min(4, n));
+  $$('.page').forEach((p, i) => p.classList.toggle('active', i === S.page));
+  $$('.railbtn[data-go]').forEach(b => b.classList.toggle('active', +b.dataset.go === S.page));
+  renderJourney();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+function renderJourney() {
+  const b = S.backlog, st = b && b.stats;
+  const running = S.job.estado === 'en_curso';
+  const sub = [
+    `${S.files.length} fuente${S.files.length === 1 ? '' : 's'}`,
+    running ? 'en curso…' : (b && b.historias.length ? 'completa' : 'sin analizar'),
+    st ? `${st.total} historias` : '—',
+    st ? (st.decision ? `${st.decision} por decidir` : 'sin pendientes') : '—',
+    st ? `${st.aprobadas} aprobadas` : '—'];
+  const done = [S.files.length > 0, !!(b && b.historias.length) && !running, !!(st && st.total && !st.revisar && !st.listas && !st.decision),
+    !!(st && st.total && !st.decision), !!(st && st.total && st.aprobadas === st.total)];
+  const html = PAGES.map((p, i) => `<button class="jstep ${i === S.page ? 'active' : (done[i] ? 'done' : '')}" data-go="${i}"><small>0${i + 1}</small><b>${p}</b><span>${esc(sub[i])}</span></button>`).join('');
+  $$('[data-journey]').forEach(j => j.innerHTML = html);
+  const dot = (i, on) => { const btn = $(`.railbtn[data-go="${i}"]`); if (!btn) return; const d = btn.querySelector('.dot'); if (on && !d) btn.insertAdjacentHTML('beforeend', '<i class="dot"></i>'); if (!on && d) d.remove(); };
+  dot(3, !!(st && st.decision)); dot(1, running);
+}
+
+// ------------------------------------------------------------------ proyectos
+async function loadProjects(selectPid) {
+  const r = await api('/projects');
+  S.projects = r.proyectos || [];
+  const sel = $('#projSel');
+  sel.innerHTML = S.projects.map(p => `<option value="${esc(p.project_id)}">${esc(p.project_name || p.project_id)} · ${esc(p.archivos)} arch.</option>`).join('')
+    || '<option value="">Sin proyectos</option>';
+  const saved = selectPid || S.pid || store('spb.pid');
+  const pick = S.projects.find(p => p.project_id === saved) || S.projects.find(p => p.historias_registradas) || S.projects[0];
+  if (pick) { sel.value = pick.project_id; await selectProject(pick.project_id); }
+  else renderAll();
+}
+async function selectProject(pid) {
+  S.pid = pid; store('spb.pid', pid); S.backlog = null; S.files = []; S.progreso = null; S.job = {estado: 'inactivo'};
+  S.epic = '__all'; S.chat.pidCtx = null;
+  const p = S.projects.find(x => x.project_id === pid);
+  $('#destHint').textContent = p && p.organizacion === 'carpeta'
+    ? `Se guardan en ${p.ubicacion}/documentos/ del bucket de entrada.`
+    : (p ? `Proyecto de archivos sueltos: se guardan con el prefijo «${pid} __» para que sigan agrupados.` : '');
+  renderAll();
+  await Promise.allSettled([loadFiles(), refreshStatus(true), loadBacklog()]);
+  renderAll();
+}
+async function loadFiles() {
+  if (!S.pid) return;
+  try { S.files = (await api(`/projects/${enc(S.pid)}/files`)).archivos || []; } catch (e) { toast(e.message, true); }
+  renderSources();
+}
+async function loadBacklog() {
+  if (!S.pid) return;
+  try { S.backlog = await api(`/projects/${enc(S.pid)}/backlog`); } catch (e) { toast(e.message, true); }
+  renderBacklogViews();
+}
+
+// ------------------------------------------------------------------ estado y sondeo
+async function refreshStatus(silent) {
+  if (!S.pid) return;
+  let st;
+  try { st = await api(`/projects/${enc(S.pid)}/status`); } catch (e) { if (!silent) toast(e.message, true); return; }
+  const antes = S.job.estado;
+  S.job = st.trabajo || {estado: 'inactivo'}; S.progreso = st.progreso; S.proyecto = st.proyecto;
+  renderProcess(); renderTop(); renderJourney();
+  clearTimeout(S.pollTimer);
+  if (S.job.estado === 'en_curso') {
+    S.pollTimer = setTimeout(() => refreshStatus(true), 1500);
+    if (S.progreso && S.progreso.etapa === 'evaluacion' && S.page === 2) loadBacklog();
+  } else if (antes === 'en_curso') {
+    await Promise.allSettled([loadBacklog(), loadFiles()]);
+    if (S.job.estado === 'error') toast('El análisis terminó con error: ' + (S.job.error || ''), true);
+    else toast(S.job.tipo === 'refinamiento' ? `Refinamiento de ${S.job.detalle} listo` : 'Propuesta lista para revisar');
+    renderAll();
+  }
+}
+
+// ------------------------------------------------------------------ render general
+function renderAll() { renderTop(); renderSources(); renderPending(); renderProcess(); renderBacklogViews(); renderJourney(); }
+function renderTop() {
+  const conn = $('#conn');
+  if (S.demo) { conn.className = 'badge off'; conn.textContent = 'Modo demo · sin backend'; conn.title = 'Abre la página desde python adk_web.py para usar los agentes.'; }
+  else if (S.online) { conn.className = 'badge on'; conn.textContent = 'ADK conectado'; conn.title = `Entrada: ${S.health.entrada} · Resultados: ${S.health.resultados} · Modelo: ${S.health.modelo}`; }
+  const ps = $('#projState');
+  const est = S.job.estado === 'en_curso' ? (S.job.tipo === 'refinamiento' ? 'Refinando ' + S.job.detalle : 'Analizando…') : (ESTADO_PROYECTO[S.backlog ? S.backlog.estado : (S.proyecto ? S.proyecto.estado : '')] || '—');
+  ps.textContent = S.pid ? `${S.pid} · ${est}` : '—';
+}
+
+function renderPending() {
+  const box = $('#pending');
+  if (!S.pending.length) { box.innerHTML = ''; $('#uploadBtn').style.display = 'none'; return; }
+  box.innerHTML = '<div style="margin-top:12px">' + S.pending.map((f, i) => {
+    const k = kindOf(f.file.name);
+    const pill = {listo: '<span class="pill">Listo para subir</span>', subiendo: '<span class="pill">Subiendo…</span>',
+      error: `<span class="pill err" title="${esc(f.mensaje)}">Error</span>`, subido_sin_transcripcion: `<span class="pill warn" title="${esc(f.mensaje)}">Sin transcripción</span>`}[f.estado] || '';
+    return `<div class="file"><div class="ficon ${k.cls}">${k.label}</div><div><b>${esc(f.file.name)}</b><span class="meta">${size(f.file.size)} · ${k.type}${f.mensaje ? ' · ' + esc(f.mensaje) : ''}</span></div>${pill}<button class="icon-btn" data-act="unpend" data-i="${i}" title="Quitar">×</button></div>`;
+  }).join('') + '</div>';
+  const listos = S.pending.filter(f => f.estado === 'listo').length;
+  const b = $('#uploadBtn'); b.style.display = listos ? 'block' : 'none'; b.textContent = `Subir ${listos} archivo${listos === 1 ? '' : 's'} al proyecto`;
+}
+function renderSources() {
+  const box = $('#sources');
+  const visibles = S.files.filter(f => f.ruta !== 'project.yaml');
+  $('#srcCount').textContent = S.pid ? `${visibles.length} archivo${visibles.length === 1 ? '' : 's'} en ${S.pid}` : 'Selecciona o crea un proyecto';
+  if (!visibles.length) { box.innerHTML = '<div class="empty">Este proyecto aún no tiene documentos.</div>'; return; }
+  box.innerHTML = visibles.map(f => {
+    const k = kindOf(f.nombre);
+    let pill = `<span class="pill">${esc(CATEGORIAS[f.categoria] || f.categoria)}</span>`;
+    if (f.audio) pill = f.transcrito ? '<span class="pill ok">Transcrito</span>' : '<span class="pill warn" title="Sin transcripción: no entra al análisis">Sin texto</span>';
+    else if (f.es_transcripcion) pill = '<span class="pill ai">Transcripción</span>';
+    else if (!f.soportado) pill = '<span class="pill warn" title="Formato que el análisis no lee">No se lee</span>';
+    const fecha = f.actualizado ? new Date(f.actualizado).toLocaleDateString('es-CO') : '';
+    return `<div class="file" style="grid-template-columns:40px 1fr auto"><div class="ficon ${k.cls}">${k.label}</div><div><b>${esc(f.nombre)}</b><span class="meta">${size(f.tamano)}${fecha ? ' · ' + fecha : ''}</span></div>${pill}</div>`;
+  }).join('');
+}
+
+function stage(n, titulo, texto, estado, stat, extra = '') {
+  return `<div class="stage ${estado}"><div class="n">${estado === 'done' ? '✓' : n}</div><div><b>${esc(titulo)}</b><span>${texto}</span>${extra}</div><div class="stat">${esc(stat)}</div></div>`;
+}
+function renderProcess() {
+  const big = $('#bigStatus'), stg = $('#stages');
+  const running = S.job.estado === 'en_curso';
+  const pr = S.progreso || {};
+  const hist = (S.backlog && S.backlog.historias) || [];
+  const run = S.proyecto && S.proyecto.ultima_ejecucion;
+  let idx = running ? Math.max(0, ETAPAS.indexOf(pr.etapa)) : (hist.length || (run && run.finished_at) ? 3 : -1);
+  if (S.job.estado === 'error' || pr.etapa === 'error') idx = Math.max(0, ETAPAS.indexOf(pr.etapa));
+  if (running) {
+    const txt = S.job.tipo === 'refinamiento' ? `Reanalizando ${esc(S.job.detalle)} con tu corrección` : 'Construyendo la propuesta';
+    big.innerHTML = `<div class="loader"></div><h2>${txt}</h2><p>El orquestador coordina al analista de historias, al revisor de arquitectura y al agente de QA. Puedes seguir aquí o volver luego.</p>`;
+  } else if (S.job.estado === 'error') {
+    big.innerHTML = `<div class="bigicon err">!</div><h2>El análisis no terminó</h2><p>${esc(S.job.error)}</p>`;
+  } else if (hist.length) {
+    const s = S.backlog.stats;
+    big.innerHTML = `<div class="bigicon ok">✓</div><h2>Propuesta lista</h2><p>${s.total} historias en ${S.backlog.epicas.length} épicas · ${s.decision} requieren tu decisión · ${s.revisar} para revisar · ${s.aprobadas} aprobadas.</p>`;
+  } else {
+    big.innerHTML = `<div class="bigicon idle">AI</div><h2>Aún no se ha analizado este proyecto</h2><p>Sube las fuentes en el paso 1 y presiona «Analizar proyecto».</p>`;
+  }
+  const st = i => i < idx || (i === idx && !running && idx >= 0) ? 'done' : (i === idx && running ? 'active' : '');
+  const fuentes = S.files.filter(f => f.ruta !== 'project.yaml');
+  const audios = fuentes.filter(f => f.audio), trans = audios.filter(f => f.transcrito).length;
+  const generadas = hist.filter(h => h.origen === 'generated').length;
+  const total = pr.total || 0, hechas = pr.hechas || 0;
+  const evalTxt = running && pr.etapa === 'evaluacion'
+    ? `${hechas} de ${total} historias · ahora: ${esc(pr.actual || '—')} (analista, arquitectura y QA en paralelo)`
+    : (hist.length ? `${hist.length} historias evaluadas por analista, arquitectura y QA; el agregador combina y el evaluador HITL decide el nivel de control` : 'Analista de historias, revisor de arquitectura y agente de QA');
+  const bar = running && pr.etapa === 'evaluacion' && total ? `<div class="minibar"><i style="width:${Math.round(100 * hechas / total)}%"></i></div>` : '';
+  const s = hist.length && !running ? S.backlog.stats : null;
+  stg.innerHTML = [
+    stage(1, 'Fuentes recibidas', `${fuentes.length} archivo${fuentes.length === 1 ? '' : 's'} del proyecto${audios.length ? ` · ${trans}/${audios.length} audio${audios.length === 1 ? '' : 's'} transcrito${audios.length === 1 ? '' : 's'}` : ''}`, st(0) || (fuentes.length ? 'done' : ''), st(0) === 'active' ? 'Leyendo' : (fuentes.length ? 'Completo' : 'Pendiente')),
+    stage(2, 'Contenido estructurado', pr.documentos != null ? `${pr.documentos} documento${pr.documentos === 1 ? '' : 's'} normalizado${pr.documentos === 1 ? '' : 's'} y clasificado${pr.documentos === 1 ? '' : 's'} (actas, propuestas, arquitectura…)` : 'Texto de PDF, Word, PowerPoint, Excel y transcripciones', st(1), st(1) === 'done' ? 'Completo' : (st(1) ? 'En curso' : 'Pendiente')),
+    stage(3, 'Historias de usuario', hist.length ? `${hist.length} historias${generadas ? ` · ${generadas} propuestas por la IA desde actas y notas (con evidencia)` : ' tomadas de los documentos'}` : (pr.historias != null ? `${pr.historias} historias identificadas` : 'Si no hay historias escritas, el generador las propone citando la evidencia'), st(2), st(2) === 'done' ? 'Completo' : (st(2) ? 'En curso' : 'Pendiente')),
+    stage(4, 'Evaluación multiagente', evalTxt, st(3) === 'done' || (idx === 3 && !running) ? 'done' : (running && pr.etapa === 'evaluacion' ? 'active' : ''), running && pr.etapa === 'evaluacion' ? `${hechas}/${total}` : (hist.length ? 'Completo' : 'Pendiente'), bar),
+    stage(5, 'Puntos de control humano', s ? `${s.decision} decisión(es) crítica(s) · ${s.revisar} historia(s) para revisar · ${s.listas} lista(s) sin observaciones` : 'Nivel 0 automático · nivel 1 revisar después · nivel 2 espera tu decisión', s && s.decision ? 'wait' : (s ? 'done' : ''), s ? (s.decision ? 'Te espera' : 'Al día') : 'Pendiente'),
+  ].join('');
+  $('#seeProposal').disabled = !hist.length;
+}
+
+// ------------------------------------------------------------------ refinamiento
+function storiesOf(epic) {
+  const hs = (S.backlog && S.backlog.historias) || [];
+  return epic === '__all' ? hs : hs.filter(h => h.epica === epic);
+}
+function chipsOf(h) {
+  const tipo = `<span class="kind ${h.tipo === 'HU-IA' ? '' : 'trad'}" title="${esc(h.tipo === 'HU-IA' ? 'Requiere un componente de IA/ML: ' + h.tipo_motivo : 'No requiere componentes de IA/ML')}">${esc(h.tipo)}</span>`;
+  const origen = h.origen === 'generated' ? '<span class="kind gen" title="Propuesta por la IA a partir de actas, notas o propuestas">Generada por IA</span>' : '<span class="kind orig" title="Escrita en un documento del proyecto">Del documento</span>';
+  const prio = h.prioridad ? `<span class="prio ${esc(h.prioridad)}" title="${esc(h.prioridad_motivo || '')}">${esc(h.prioridad)}${h.prioridad_origen === 'ia' ? ' · sugerida' : ''}</span>` : '';
+  return tipo + origen + prio + `<span class="st ${esc(h.estado_ui)}">${esc(ESTADOS[h.estado_ui] || h.estado_ui)}</span>`;
+}
+function hitlBox(h) {
+  if (h.estado_ui === 'decision' && h.decision) {
+    const d = h.decision;
+    const qs = d.preguntas && d.preguntas.length ? `<div style="margin-top:6px"><b>Preguntas bloqueantes</b><ul>${d.preguntas.map(q => `<li>${esc(q)}</li>`).join('')}</ul></div>` : '';
+    const cc = h.cambios_criticos && h.cambios_criticos.length ? ` · cambios críticos: ${h.cambios_criticos.map(esc).join(', ')}` : '';
+    return `<div class="hitlbox decision"><b>Requiere tu decisión</b> · ${esc(d.motivo)}<div class="small" style="margin-top:4px">Riesgo ${esc(d.riesgo)} · confianza ${pct(d.confianza)}${cc}</div>${d.recomendacion ? `<div style="margin-top:6px"><b>Recomendación del agente:</b> ${esc(d.recomendacion)}</div>` : ''}${qs}</div>`;
+  }
+  if (h.estado_ui === 'revisar' && h.hitl.motivos.length) {
+    return `<div class="hitlbox revisar"><b>Revisión recomendada</b> · continúa, pero conviene que la mires:<ul>${h.hitl.motivos.slice(0, 4).map(m => `<li>${esc(m.descripcion)}</li>`).join('')}</ul></div>`;
+  }
+  if (h.estado_ui === 'error' && h.error) return `<div class="hitlbox decision"><b>Error</b> · ${esc(h.error)}</div>`;
+  return '';
+}
+function storyCard(h) {
+  const prop = h.propuesta || {};
+  const titulo = prop.title || h.titulo;
+  const narrativa = prop.narrative || h.original.narrativa;
+  const criterios = (prop.acceptance_criteria && prop.acceptance_criteria.length ? prop.acceptance_criteria : h.original.criterios) || [];
+  const ev = (h.evidencia || []).slice(0, 2).map(e => `<div><q>${esc(e.statement)}</q> <span class="small">— ${esc((e.source || '').split('/').pop())}</span></div>`).join('');
+  const busy = S.job.estado === 'en_curso';
+  const restantes = (S.backlog.max_refinamientos || 2) - (h.refinamientos || 0);
+  const fin = ['descartada', 'analizando', 'pendiente', 'error'].includes(h.estado_ui);
+  const dis = c => (busy || c) ? 'disabled' : '';
+  const acciones = fin ? '' : `
+      <button class="ok" data-act="approve" data-id="${esc(h.id)}" ${dis(h.estado_ui === 'aprobada')}>${h.estado_ui === 'aprobada' ? '✓ Aprobada' : '✓ Aprobar'}</button>
+      <button class="ref" data-act="refine" data-id="${esc(h.id)}" ${dis(restantes <= 0)} title="${restantes <= 0 ? 'Se alcanzó el límite de refinamientos' : `Quedan ${restantes} refinamiento(s)`}">↻ Refinar</button>
+      <button class="no" data-act="reject" data-id="${esc(h.id)}" ${dis(false)}>Descartar</button>
+      ${h.estado_ui === 'decision' ? `<button class="info" data-act="needinfo" data-id="${esc(h.id)}" ${dis(false)}>Pedir información</button>` : ''}`;
+  const dep = h.depende_de && h.depende_de.length ? `<span>Depende de <b>${h.depende_de.map(esc).join(', ')}</b></span>` : '';
+  const comentario = h.comentario_humano ? `<span>Tu última indicación: <b>${esc(h.comentario_humano)}</b></span>` : '';
+  return `<div class="story st-${esc(h.estado_ui)}" id="card-${esc(h.id)}">
+    <div class="storytop">
+      <div><h4><span class="sid">${esc(h.id)}</span> · ${esc(titulo)}</h4><p>${esc(narrativa)}</p></div>
+      <div class="chips">${chipsOf(h)}</div>
+    </div>
+    ${criterios.length ? `<ul class="crit">${criterios.slice(0, 6).map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+    <div class="meta-line"><span>Calidad <b>${num(h.calidad)}</b>/100</span><span>Confianza <b>${pct(h.confianza)}</b></span><span>HITL nivel <b>${esc(h.hitl.nivel)}</b></span><span><b>${h.pruebas.length}</b> casos de prueba</span>${dep}${comentario}</div>
+    ${ev ? `<div class="source"><b>Evidencia</b>${ev}</div>` : ''}
+    ${hitlBox(h)}
+    <button class="toggle" data-act="toggle-orig" data-id="${esc(h.id)}">Ver versión original y cambios sugeridos</button>
+    <div class="original" id="orig-${esc(h.id)}"><b>Original${h.origen === 'generated' ? ' (propuesta inicial de la IA)' : ''}:</b> ${esc(h.original.narrativa)}${h.original.criterios.length ? `<ul class="crit">${h.original.criterios.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}${(h.cambios_sugeridos || []).length ? `<div style="margin-top:6px"><b>Cambios sugeridos:</b><ul class="crit">${h.cambios_sugeridos.map(c => `<li>${esc(c.field)}: ${esc(c.after)} <span class="small">(${esc(c.reason)})</span></li>`).join('')}</ul></div>` : ''}</div>
+    <div class="actions">${acciones}<button class="why" data-act="why" data-id="${esc(h.id)}">¿Por qué?</button></div>
+    <div class="refinebox" id="rb-${esc(h.id)}">
+      <textarea rows="2" placeholder="Ej. agrega que también valide nubosidad antes de iniciar"></textarea>
+      <select aria-label="Prioridad"><option value="">Prioridad: mantener</option><option>Alta</option><option>Media</option><option>Baja</option></select>
+      <button class="solid" data-act="send-refine" data-id="${esc(h.id)}">Enviar</button>
+      <div class="err"></div>
+      <div class="hint">Los agentes vuelven a analizar la historia con tu indicación (quedan ${Math.max(0, restantes)} de ${S.backlog.max_refinamientos}).</div>
+    </div>
+  </div>`;
+}
+function renderRefinement() {
+  const b = S.backlog;
+  const ep = $('#epics'), area = $('#stories');
+  if (!b || !b.historias.length) {
+    ep.innerHTML = '<div class="panel-head"><div><h3>Épicas</h3><p>Sin análisis todavía</p></div></div>';
+    $('#epicTitle').textContent = 'Sin historias'; $('#epicSub').textContent = 'Analiza el proyecto para ver la propuesta.';
+    area.innerHTML = '<div class="empty">Cuando termine el análisis verás aquí las historias propuestas.</div>';
+    $('#filters').innerHTML = ''; $('#approveEpic').style.display = 'none'; return;
+  }
+  if (S.epic !== '__all' && !b.epicas.some(e => e.nombre === S.epic)) S.epic = '__all';
+  ep.innerHTML = `<div class="panel-head"><div><h3>Épicas</h3><p>${b.epicas.length} detectada${b.epicas.length === 1 ? '' : 's'}</p></div></div>`
+    + `<button class="epic ${S.epic === '__all' ? 'active' : ''}" data-act="epic" data-epic="__all"><b>Todas las historias</b><span>${b.stats.total} vigentes · ${b.stats.decision} por decidir</span></button>`
+    + b.epicas.map(e => `<button class="epic ${S.epic === e.nombre ? 'active' : ''}" data-act="epic" data-epic="${esc(e.nombre)}"><b>${esc(e.nombre)}</b><span>${e.total} historia${e.total === 1 ? '' : 's'} · ${e.aprobadas} aprobada${e.aprobadas === 1 ? '' : 's'}${e.decision ? ` · ${e.decision} por decidir` : ''}</span><div class="bar"><i style="width:${e.avance}%"></i></div></button>`).join('');
+  const hs = storiesOf(S.epic);
+  const pend = hs.filter(h => ['lista', 'revisar', 'decision'].includes(h.estado_ui)).length;
+  $('#epicTitle').textContent = S.epic === '__all' ? 'Todas las historias' : S.epic;
+  $('#epicSub').textContent = `${hs.length} historia${hs.length === 1 ? '' : 's'} · ${pend} pendiente${pend === 1 ? '' : 's'} de revisión`;
+  const aprobables = hs.filter(h => ['lista', 'revisar'].includes(h.estado_ui)).length;
+  const ae = $('#approveEpic');
+  ae.style.display = S.epic === '__all' ? 'none' : 'inline-block';
+  ae.disabled = !aprobables || S.job.estado === 'en_curso';
+  ae.title = 'Aprueba las historias sin decisión crítica; las críticas se deciden una por una';
+  ae.textContent = aprobables ? `Aprobar épica (${aprobables})` : 'Aprobar épica';
+  const filtros = [['todas', 'Todas'], ['pendientes', 'Pendientes'], ['decision', 'Requieren decisión'], ['ia', 'HU-IA'], ['aprobada', 'Aprobadas'], ['descartada', 'Descartadas']];
+  $('#filters').innerHTML = filtros.map(([k, l]) => `<button class="${S.filter === k ? 'active' : ''}" data-act="filter" data-f="${k}">${l}</button>`).join('');
+  const f = S.filter;
+  const vis = hs.filter(h => f === 'todas' ? true : f === 'pendientes' ? ['lista', 'revisar', 'decision'].includes(h.estado_ui)
+    : f === 'ia' ? h.tipo === 'HU-IA' : h.estado_ui === f);
+  area.innerHTML = vis.length ? vis.map(storyCard).join('') : '<div class="empty">No hay historias con este filtro.</div>';
+}
+
+// ------------------------------------------------------------------ validación y backlog
+function renderValidation() {
+  const b = S.backlog;
+  const hs = (b && b.historias) || [];
+  const dec = hs.filter(h => h.estado_ui === 'decision');
+  $('#decSub').textContent = dec.length ? `${dec.length} historia${dec.length === 1 ? '' : 's'} no avanza${dec.length === 1 ? '' : 'n'} hasta que decidas.` : 'No hay decisiones críticas pendientes.';
+  $('#decisions').innerHTML = dec.length ? dec.map(storyCard).join('') : '<div class="empty">Todo al día ✓</div>';
+  const vig = hs.filter(h => h.estado_ui !== 'descartada');
+  const inv = h => { const i = h.invest || {}; return `<div class="invest">${[['independent', 'I'], ['negotiable', 'N'], ['valuable', 'V'], ['estimable', 'E'], ['small', 'S'], ['testable', 'T']].map(([k, l]) => { const v = i[k]; return `<span class="${v == null ? '' : v <= 2 ? 'lo' : v >= 4 ? 'hi' : ''}" title="${l}: ${v ?? '—'}/5">${l}</span>`; }).join('')}</div>`; };
+  $('#quality').innerHTML = vig.length ? `<tr><th>Historia</th><th>INVEST</th><th>Calidad</th><th>Confianza</th><th>Pruebas</th></tr>` + vig.map(h =>
+    `<tr><td><b>${esc(h.id)}</b><div class="small muted">${esc((h.propuesta && h.propuesta.title) || h.titulo)}</div></td><td>${inv(h)}</td><td style="min-width:90px"><b>${num(h.calidad)}</b><div class="bar"><i style="width:${h.calidad || 0}%"></i></div></td><td>${pct(h.confianza)}</td><td>${h.pruebas.length}${h.no_verificables.length ? ` <span class="pill warn" title="${esc(h.no_verificables.join(' · '))}">${h.no_verificables.length} no verificable${h.no_verificables.length === 1 ? '' : 's'}</span>` : ''}</td></tr>`).join('')
+    : '<tr><td class="empty">Sin historias analizadas.</td></tr>';
+  const con = vig.filter(h => h.pruebas.length);
+  $('#tests').innerHTML = con.length ? con.map(h => `<details class="tc"><summary>${esc(h.id)} · ${h.pruebas.length} caso${h.pruebas.length === 1 ? '' : 's'}</summary>${h.pruebas.map(t =>
+    `<div style="margin-top:10px"><b>${esc(t.id)}</b> · ${esc(t.titulo)} <span class="pill">${esc(t.tipo)}</span><div class="gwt"><b>Dado</b><span>${esc(t.dado)}</span><b>Cuando</b><span>${esc(t.cuando)}</span><b>Entonces</b><span>${esc(t.entonces)}</span></div></div>`).join('')}</details>`).join('')
+    : '<div class="empty">Sin casos de prueba todavía.</div>';
+  const oq = (b && b.preguntas_abiertas) || [];
+  $('#openQ').innerHTML = oq.length ? `<ul class="qlist">${oq.map(q => `<li>${q.bloqueante ? '<span class="pill err">bloqueante</span> ' : ''}${esc(q.pregunta)}</li>`).join('')}</ul>` : '<div class="empty">Sin preguntas abiertas registradas.</div>';
+  const dd = (b && b.decisiones_documentadas) || [];
+  $('#docDec').innerHTML = dd.length ? `<ul class="qlist">${dd.map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : '<div class="empty">El generador no registró decisiones (o las historias venían escritas).</div>';
+}
+function renderBacklog() {
+  const b = S.backlog;
+  const hs = ((b && b.historias) || []).filter(h => h.estado_ui !== 'descartada');
+  const s = b ? b.stats : null;
+  const card = (t, v, sub) => `<div class="glass statcard"><small>${t}</small><b>${v}</b><span>${sub}</span></div>`;
+  $('#stats').innerHTML = s ? [card('Épicas', b.epicas.length, ''), card('Aprobadas', `${s.aprobadas}/${s.total}`, 'por un humano'),
+    card('HU-IA', s.hu_ia, 'requieren IA/ML'), card('HU tradicionales', s.total - s.hu_ia, ''), card('Por decidir', s.decision, `${s.revisar} para revisar`)].join('') : '';
+  $('#rows').innerHTML = hs.length ? hs.map(h => `<div class="row" data-act="open-story" data-id="${esc(h.id)}" data-epic="${esc(h.epica)}"><b>${esc(h.id)}</b><span class="t">${esc((h.propuesta && h.propuesta.title) || h.titulo)}<span class="sub">${esc(h.epica)}${h.origen === 'generated' ? ' · generada por IA' : ''}</span></span><span class="kind ${h.tipo === 'HU-IA' ? '' : 'trad'} mobilehide" style="text-align:center">${esc(h.tipo === 'HU-IA' ? 'HU-IA' : 'Tradicional')}</span><span class="prio ${esc(h.prioridad)} mobilehide" style="text-align:center">${esc(h.prioridad || '—')}</span><span class="st ${esc(h.estado_ui)} mobilehide" style="text-align:center">${esc(ESTADOS[h.estado_ui])}</span></div>`).join('')
+    : '<div class="empty">El backlog aparece cuando termine el análisis.</div>';
+  $('#bars').innerHTML = b && b.epicas.length ? b.epicas.map(e => `<div class="epicbar"><b>${esc(e.nombre)} <span>${e.aprobadas}/${e.total - e.descartadas}</span></b><div class="bar"><i style="width:${e.avance}%"></i></div></div>`).join('') : '<div class="empty">—</div>';
+  $('#projSummary').textContent = (b && b.resumen) || (b && b.historias.length ? 'Historias tomadas de los documentos del proyecto.' : '—');
+  const base = S.pid ? `${API}/projects/${enc(S.pid)}/export?formato=` : '#';
+  ['Csv', 'Json'].forEach(k => { const a = $('#exp' + k); a.href = S.demo ? '#' : base + k.toLowerCase(); a.style.pointerEvents = hs.length ? '' : 'none'; a.style.opacity = hs.length ? 1 : .5; });
+  $('#footer').textContent = S.online ? `Entrada: ${S.health.entrada} · Resultados y auditoría: ${S.health.resultados}` : 'Modo demo: datos de ejemplo, nada se guarda.';
+}
+function renderBacklogViews() { renderRefinement(); renderValidation(); renderBacklog(); renderProcess(); renderTop(); renderJourney(); }
+
+// ------------------------------------------------------------------ acciones
+async function upload() {
+  const listos = S.pending.filter(f => f.estado === 'listo');
+  if (!listos.length || !S.pid) return;
+  const fd = new FormData();
+  listos.forEach(f => { f.estado = 'subiendo'; fd.append('files', f.file, f.file.name); });
+  renderPending();
+  try {
+    const r = await api(`/projects/${enc(S.pid)}/files`, {method: 'POST', body: fd});
+    r.resultados.forEach((res, i) => { listos[i].estado = res.estado; listos[i].mensaje = res.mensaje; });
+    const ok = listos.filter(f => ['subido', 'transcrito'].includes(f.estado)).length;
+    S.pending = S.pending.filter(f => !['subido', 'transcrito'].includes(f.estado));
+    S.files = r.archivos || S.files;
+    const p = S.projects.find(x => x.project_id === S.pid), opt = $('#projSel').selectedOptions[0];
+    if (p && opt) { p.archivos = S.files.length; opt.textContent = `${p.project_name || p.project_id} · ${p.archivos} arch.`; }
+    toast(`${ok} de ${listos.length} archivo(s) guardado(s) en el proyecto` + (listos.some(f => f.estado === 'transcrito') ? ' · audio transcrito' : ''), ok < listos.length);
+  } catch (e) {
+    listos.forEach(f => { f.estado = 'error'; f.mensaje = e.message; });
+    toast(e.message, true);
+  }
+  renderPending(); renderSources(); renderProcess(); renderJourney();
+}
+async function analyze() {
+  if (!S.pid) return toast('Selecciona o crea un proyecto', true);
+  if (S.pending.some(f => f.estado === 'listo')) return toast('Tienes archivos sin subir: súbelos primero.', true);
+  try {
+    await api(`/projects/${enc(S.pid)}/analyze`, {method: 'POST', body: {regenerar: $('#optRegen').checked, forzar: $('#optForce').checked}});
+    S.job = {estado: 'en_curso', tipo: 'analisis'}; S.progreso = {etapa: 'fuentes'};
+    go(1); renderProcess(); refreshStatus(true);
+  } catch (e) { toast(e.message, true); }
+}
+async function decide(id, decision, comentario = '', modificaciones = {}) {
+  try {
+    const r = await api(`/projects/${enc(S.pid)}/stories/${enc(id)}/decision`, {method: 'POST', body: {decision, comentario, modificaciones}});
+    if (r.status === 'en_curso') {
+      toast(`Reanalizando ${id} con tu indicación…`);
+      S.job = {estado: 'en_curso', tipo: 'refinamiento', detalle: id};
+      const h = S.backlog.historias.find(x => x.id === id); if (h) h.estado_ui = 'analizando';
+      renderBacklogViews(); refreshStatus(true);
+      return;
+    }
+    toast({APPROVED: `${id} aprobada`, REJECTED: `${id} descartada`, NEEDS_MORE_INFORMATION: `${id} queda esperando información`}[decision] || 'Hecho');
+    await loadBacklog();
+  } catch (e) { toast(e.message, true); }
+}
+async function approveEpic() {
+  if (S.epic === '__all') return;
+  try {
+    const r = await api(`/projects/${enc(S.pid)}/epics/approve`, {method: 'POST', body: {epica: S.epic}});
+    const crit = r.requieren_decision_individual.length;
+    toast(`${r.aprobadas.length} historia(s) aprobada(s)` + (crit ? ` · ${crit} requiere(n) tu decisión individual` : ''));
+    await loadBacklog();
+  } catch (e) { toast(e.message, true); }
+}
+async function why(id) {
+  openModal('<div class="loader" style="width:40px;height:40px"></div>');
+  try {
+    const r = await api(`/projects/${enc(S.pid)}/stories/${enc(id)}/explain`);
+    const ag = (r.revisiones_por_agente || []).map(a => `<div class="agentcard"><b>${esc(a.agent)}</b> · ${esc(a.status)} · confianza ${pct(a.confidence)}<div>${esc(a.summary)}</div></div>`).join('');
+    const hitl = r.evaluacion_hitl || {};
+    const motivos = (hitl.reasons || []).map(m => `<li>${m.critical ? '<b>[crítico]</b> ' : ''}${esc(m.description)} <span class="small muted">(${esc(m.agent)})</span></li>`).join('');
+    const tl = (r.transiciones || []).slice(-10).map(t => `<li><b>${esc(t.from_state || t.from || '')} → ${esc(t.to_state || t.to || '')}</b> · ${esc(t.actor || '')} <span class="small muted">${esc(t.reason || '')}</span></li>`).join('');
+    const decs = (r.decisiones || []).map(d => `<li>${esc(d.request.decision_id)}: ${esc(d.resolution ? d.resolution.decision + ' por ' + d.resolution.decided_by : 'pendiente')}</li>`).join('');
+    openModal(`<div class="panel-head"><div><h3>¿Por qué ${esc(id)} está en ${esc(r.estado_final)}?</h3><p>Nivel HITL ${esc(hitl.level ?? '—')} · acción ${esc(hitl.action || '—')} · confianza ${pct(hitl.confidence)}</p></div><button class="ghost" data-act="close-modal">✕</button></div>
+      ${motivos ? `<h4 style="margin:8px 0 4px">Motivos del evaluador HITL</h4><ul class="qlist">${motivos}</ul>` : '<p class="muted">Sin motivos de control humano: todos los agentes coinciden con confianza alta.</p>'}
+      <h4 style="margin:14px 0 4px">Qué dijo cada agente</h4>${ag || '<p class="muted">—</p>'}
+      ${decs ? `<h4 style="margin:14px 0 4px">Decisiones humanas</h4><ul class="qlist">${decs}</ul>` : ''}
+      <h4 style="margin:14px 0 4px">Recorrido</h4><ul class="timeline">${tl}</ul>
+      <p class="small muted" style="margin-top:12px">${(r.versiones || []).length} versión(es) guardadas · ${(r.auditoria || []).length} evento(s) de auditoría.</p>`);
+  } catch (e) { openModal(`<p>${esc(e.message)}</p><button class="ghost" data-act="close-modal">Cerrar</button>`); }
+}
+function openModal(html) { $('#modal').innerHTML = html; $('#modal').classList.add('show'); $('#scrim').classList.add('show'); }
+function closeModal() { $('#modal').classList.remove('show'); if (!$('#drawer').classList.contains('open')) $('#scrim').classList.remove('show'); }
+function newProjectForm() {
+  openModal(`<div class="panel-head"><div><h3>Nuevo proyecto</h3><p>Se crea <code>projects/&lt;id&gt;/project.yaml</code> en el bucket de entrada.</p></div><button class="ghost" data-act="close-modal">✕</button></div>
+    <div class="form"><label>Nombre<input class="field" id="npName" maxlength="120" placeholder="Ej. Monitoreo de coberturas Amazonía"></label>
+    <label>Descripción (opcional)<textarea class="field" id="npDesc" rows="3" maxlength="2000"></textarea></label>
+    <div class="err small" id="npErr" style="color:#ff8ca0"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px"><button class="ghost" data-act="close-modal">Cancelar</button><button class="solid" data-act="create-project">Crear</button></div></div>`);
+  setTimeout(() => $('#npName').focus(), 50);
+}
+async function createProject() {
+  const nombre = $('#npName').value.trim();
+  if (nombre.length < 3) { $('#npErr').textContent = 'Escribe un nombre de al menos 3 caracteres.'; return; }
+  try {
+    const r = await api('/projects', {method: 'POST', body: {nombre, descripcion: $('#npDesc').value.trim()}});
+    closeModal(); toast(`Proyecto ${r.project_id} creado`); await loadProjects(r.project_id); go(0);
+  } catch (e) { $('#npErr').textContent = e.message; }
+}
+
+// ------------------------------------------------------------------ asistente (ADK)
+function chatUser() { return 'spb-' + (S.user || 'usuario').normalize('NFKD').replace(/[^\w-]/g, '').toLowerCase().slice(0, 40); }
+function addMsg(cls, html, author) {
+  const m = document.createElement('div'); m.className = 'msg ' + cls;
+  m.innerHTML = (author ? `<small>${esc(author)}</small>` : '') + html;
+  $('#msgs').appendChild(m); $('#msgs').scrollTop = 1e9; return m;
+}
+function addTool(text, done) { const t = document.createElement('div'); t.className = 'tool' + (done ? ' done' : ''); t.textContent = text; $('#msgs').appendChild(t); $('#msgs').scrollTop = 1e9; }
+function openChat() {
+  $('#drawer').classList.add('open'); $('#scrim').classList.add('show');
+  if (!$('#msgs').children.length) addMsg('bot', S.demo ? 'Estás en modo demo. Inicia <code>python adk_web.py</code> y abre <code>/spb</code> para conversar con el orquestador.' : `Hola. Puedo explicarte el estado de <b>${esc(S.pid || 'tus proyectos')}</b>, por qué una historia requiere decisión o qué dicen los documentos del bucket.`, 'orquestador_hu');
+  const id = S.backlog && (S.backlog.historias.find(h => h.estado_ui === 'decision') || S.backlog.historias[0]);
+  const sugs = ['¿Qué decisiones están pendientes?', id ? `¿Por qué ${id.id} está en ${ESTADOS[id.estado_ui]}?` : '¿Qué proyectos hay en el bucket?', 'Resume los riesgos del proyecto', '¿Qué dicen los documentos sobre los responsables?'];
+  $('#sugs').innerHTML = sugs.map(s => `<button data-act="sug">${esc(s)}</button>`).join('');
+  setTimeout(() => $('#chatInput').focus(), 100);
+}
+function closeChat() { $('#drawer').classList.remove('open'); if (!$('#modal').classList.contains('show')) $('#scrim').classList.remove('show'); }
+async function send(text) {
+  text = (text || '').trim();
+  if (!text || S.chat.busy) return;
+  $('#chatInput').value = '';
+  addMsg('me', esc(text));
+  if (S.demo) { addMsg('bot', 'En modo demo no hay agente conectado.', 'demo'); return; }
+  S.chat.busy = true;
+  const vigia = setInterval(() => { if (S.job.estado !== 'en_curso') refreshStatus(true); }, 2500);  // el agente puede lanzar un análisis
+  const typing = document.createElement('div'); typing.className = 'typing'; typing.textContent = 'El orquestador está trabajando'; $('#msgs').appendChild(typing);
+  try {
+    const uid = chatUser();
+    if (!S.chat.session) {
+      const r = await fetch(`/apps/${CHAT_APP}/users/${enc(uid)}/sessions`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+      if (!r.ok) throw new Error('No se pudo abrir la sesión con el agente (' + r.status + ')');
+      S.chat.session = (await r.json()).id;
+    }
+    let msg = text;
+    if (S.pid && S.chat.pidCtx !== S.pid) { msg = `[Contexto de la interfaz SPB: el proyecto seleccionado es ${S.pid}. Quien decide se llama ${S.user}.]\n${text}`; S.chat.pidCtx = S.pid; }
+    const r = await fetch('/run_sse', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({appName: CHAT_APP, userId: uid, sessionId: S.chat.session, newMessage: {role: 'user', parts: [{text: msg}]}, streaming: false})});
+    if (!r.ok) { let d = ''; try { d = (await r.json()).detail; } catch (e) { /* */ } throw new Error(d || `El agente respondió ${r.status}`); }
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+        chunk.split('\n').filter(l => l.startsWith('data: ')).forEach(l => { try { onEvent(JSON.parse(l.slice(6))); } catch (e) { /* línea parcial */ } });
+      }
+    }
+  } catch (e) { addMsg('err', esc(e.message)); }
+  finally {
+    clearInterval(vigia); typing.remove(); S.chat.busy = false;
+    refreshStatus(true); loadBacklog();   // el agente pudo analizar o registrar decisiones
+  }
+}
+function onEvent(ev) {
+  if (ev.error || ev.errorMessage) { addMsg('err', esc(ev.error || ev.errorMessage)); return; }
+  const parts = (ev.content && ev.content.parts) || [];
+  for (const p of parts) {
+    if (p.functionCall) addTool('→ ' + p.functionCall.name + (p.functionCall.name === 'agente_documentos' ? ' (consulta al agente del bucket)' : ''));
+    else if (p.functionResponse) addTool('✓ ' + p.functionResponse.name, true);
+    else if (p.text && !p.thought && ev.author !== 'user' && !ev.partial) addMsg('bot', md(p.text), ev.author);
+  }
+}
+
+// ------------------------------------------------------------------ modo demo (sin backend)
+function demoData() {
+  const ev = (t, s) => [{statement: t, type: 'FACT', source: s}];
+  const mk = (id, titulo, epica, tipo, prio, estado, narr, crit, evid, extra = {}) => Object.assign({
+    id, titulo, epica, origen: 'generated', fuente: '', tipo, tipo_motivo: tipo === 'HU-IA' ? 'Clasificación automática de imágenes con un modelo entrenado' : '',
+    prioridad: prio, prioridad_motivo: 'Recomendación de la IA según las notas', prioridad_origen: 'ia', estado: 'READY_FOR_IMPLEMENTATION', estado_ui: estado,
+    orden: null, depende_de: [], original: {narrativa: narr, criterios: crit, reglas: []}, propuesta: {title: titulo, narrative: narr, acceptance_criteria: crit},
+    cambios_sugeridos: [], evidencia: ev(evid, 'SERVI _ SINCHI __ Sesion tecnica.md'), confianza_generacion: .8, calidad: 80, confianza: .82,
+    invest: {independent: 4, negotiable: 4, valuable: 5, estimable: 3, small: 4, testable: 4}, hitl: {nivel: 1, accion: 'CONTINUE_WITH_REVIEW', motivos: [{codigo: 'GENERATED_STORY', descripcion: 'Historia generada por IA: valídala con el dueño del producto', severidad: 'MEDIUM', critico: false}]},
+    decision: null, preguntas: [], pruebas: [{id: 'TC-' + id + '-01', titulo: 'Camino feliz', tipo: 'POSITIVE', dado: 'una imagen nueva disponible', cuando: 'el sistema consulta el catálogo', entonces: 'se inicia el procesamiento'}],
+    no_verificables: [], riesgos: [], cambios_criticos: [], conflictos: [], agentes: [], aprobada_por_humano: false, refinamientos: 0, comentario_humano: '', error: ''}, extra);
+  const hs = [
+    mk('HU-IA-001', 'Consultar disponibilidad de nuevas imágenes', 'Monitoreo automatizado', 'HU-IA', 'Alta', 'revisar',
+      'Como analista ambiental quiero que el sistema consulte automáticamente si existen nuevas imágenes satelitales para iniciar el procesamiento cuando haya información disponible',
+      ['Se consulta el catálogo cada día', 'Si hay imagen nueva se inicia el procesamiento'], '…ese request dice: ¿ya hay imagen? y si hay imagen, dispara el proceso…'),
+    mk('HU-IA-002', 'Configurar umbral de nubosidad', 'Monitoreo automatizado', 'HU-Tradicional', 'Media', 'lista',
+      'Como especialista SIG quiero definir el porcentaje máximo de nubosidad permitido para evitar procesar imágenes que no sean útiles',
+      ['El umbral se configura entre 0 y 100 %'], '…podemos decidir con qué porcentaje de nubosidad aceptamos imágenes…', {hitl: {nivel: 0, accion: 'CONTINUE', motivos: []}}),
+    mk('HU-IA-003', 'Elegir la plataforma de procesamiento', 'Infraestructura', 'HU-Tradicional', 'Alta', 'decision',
+      'Como líder técnico quiero decidir entre Google Earth Engine e infraestructura propia para definir la arquitectura del piloto',
+      ['Queda registrada la decisión y su justificación'], '…definir si la implementación será en Google Earth Engine o en infraestructura propia…',
+      {hitl: {nivel: 2, accion: 'WAIT_FOR_HUMAN', motivos: [{codigo: 'ARCHITECTURE_CHANGE', descripcion: 'Cambio de arquitectura', severidad: 'HIGH', critico: true}]}, cambios_criticos: ['ARCHITECTURE_CHANGE'],
+        decision: {decision_id: 'DEC-DEMO', motivo: 'Cambio de arquitectura sin decisión tomada en las notas', recomendacion: 'Hacer una prueba de concepto en ambas opciones con un municipio', riesgo: 'HIGH', confianza: .7, preguntas: ['¿Quién toma la decisión de plataforma?'], alternativas: [], agente: 'architecture_agent'}}),
+    mk('HU-IA-004', 'Comparar coberturas entre periodos', 'Indicadores', 'HU-IA', 'Media', 'revisar',
+      'Como responsable de monitoreo quiero comparar cortes periódicos de la Amazonía para identificar cambios en el tiempo', ['Se comparan dos periodos y se muestra el cambio por clase'],
+      '…generar una mirada de toda la Amazonía, si es cada 15 días, si es cada mes…'),
+  ];
+  return {project_id: 'DEMO', project_name: 'Proyecto demo', estado: 'WAITING_FOR_HUMAN', resumen: 'Ejemplo de backlog generado desde notas de reunión (datos ficticios).',
+    decisiones_documentadas: ['Los indicadores se publican mensualmente'], preguntas_abiertas: [{pregunta: '¿Umbrales de probabilidad por clase?', bloqueante: false}],
+    historias: hs, epicas: [], stats: {}, trabajo: {estado: 'inactivo'}, max_refinamientos: 2, ciclos_dependencia: []};
+}
+function demoRecalc(b) {
+  const ep = {};
+  b.historias.forEach(h => { const e = ep[h.epica] = ep[h.epica] || {nombre: h.epica, historias: [], aprobadas: 0, decision: 0, descartadas: 0, aprobables: 0};
+    e.historias.push(h.id); e.aprobadas += h.estado_ui === 'aprobada'; e.decision += h.estado_ui === 'decision'; e.descartadas += h.estado_ui === 'descartada'; });
+  b.epicas = Object.values(ep).map(e => Object.assign(e, {total: e.historias.length, avance: Math.round(100 * e.aprobadas / Math.max(1, e.historias.length - e.descartadas))}));
+  const v = b.historias.filter(h => h.estado_ui !== 'descartada'), c = f => v.filter(f).length;
+  b.stats = {total: v.length, hu_ia: c(h => h.tipo === 'HU-IA'), generadas: c(h => h.origen === 'generated'), aprobadas: c(h => h.estado_ui === 'aprobada'),
+    decision: c(h => h.estado_ui === 'decision'), revisar: c(h => h.estado_ui === 'revisar'), listas: c(h => h.estado_ui === 'lista'), descartadas: b.historias.length - v.length,
+    prioridad: {}, calidad_promedio: 80};
+  return b;
+}
+let DEMO = null;
+async function demoApi(path, opts) {
+  DEMO = DEMO || demoRecalc(demoData());
+  const m = opts.method || 'GET';
+  if (path === '/projects' && m === 'GET') return {proyectos: [{project_id: 'DEMO', project_name: 'Proyecto demo', archivos: 2, organizacion: 'carpeta', ubicacion: 'projects/demo', historias_registradas: 4}]};
+  if (path.endsWith('/files') && m === 'GET') return {archivos: [
+    {nombre: 'SERVI _ SINCHI __ Sesion tecnica.md', ruta: 'notas.md', tamano: 18200, actualizado: '', formato: 'md', categoria: 'decisions', soportado: true, audio: false, transcrito: false, es_transcripcion: false},
+    {nombre: 'reunion_seguimiento.m4a', ruta: 'reunion.m4a', tamano: 5400000, actualizado: '', formato: 'm4a', categoria: 'decisions', soportado: false, audio: true, transcrito: true, es_transcripcion: false}]};
+  if (path.endsWith('/status')) return {trabajo: {estado: 'inactivo'}, progreso: {etapa: 'terminado', documentos: 2, historias: 4, total: 4, hechas: 4}, proyecto: {estado: DEMO.estado}};
+  if (path.endsWith('/backlog')) return demoRecalc(DEMO);
+  const d = path.match(/stories\/([^/]+)\/decision$/);
+  if (d) {
+    const h = DEMO.historias.find(x => x.id === decodeURIComponent(d[1])), dec = opts.body.decision;
+    if (dec === 'APPROVED') { h.estado_ui = 'aprobada'; h.aprobada_por_humano = true; }
+    if (dec === 'REJECTED') h.estado_ui = 'descartada';
+    if (dec === 'MODIFIED') { h.refinamientos++; h.comentario_humano = opts.body.comentario; if (opts.body.modificaciones.priority) { h.prioridad = opts.body.modificaciones.priority; h.prioridad_origen = 'humano'; } }
+    if (dec === 'NEEDS_MORE_INFORMATION') h.comentario_humano = opts.body.comentario;
+    return {status: 'ok'};
+  }
+  if (path.endsWith('/epics/approve')) { const ap = []; const cr = [];
+    DEMO.historias.filter(h => h.epica === opts.body.epica).forEach(h => { if (['lista', 'revisar'].includes(h.estado_ui)) { h.estado_ui = 'aprobada'; ap.push(h.id); } else if (h.estado_ui === 'decision') cr.push(h.id); });
+    return {aprobadas: ap, requieren_decision_individual: cr}; }
+  if (path.endsWith('/explain')) return {estado_final: 'DEMO', evaluacion_hitl: {}, revisiones_por_agente: [], transiciones: [], decisiones: [], versiones: [], auditoria: []};
+  throw new Error('Modo demo: conecta el backend para ' + (m === 'POST' ? 'esta acción' : path));
+}
+
+// ------------------------------------------------------------------ eventos
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-go],[data-act]');
+  if (!el || el.disabled) return;
+  if (el.dataset.go !== undefined) { go(+el.dataset.go); return; }
+  const id = el.dataset.id, act = el.dataset.act;
+  const h = id && S.backlog ? S.backlog.historias.find(x => x.id === id) : null;
+  switch (act) {
+    case 'next': go(S.page + 1); break;
+    case 'pick': $('#fileInput').click(); break;
+    case 'unpend': S.pending.splice(+el.dataset.i, 1); renderPending(); break;
+    case 'upload': upload(); break;
+    case 'analyze': analyze(); break;
+    case 'reload-files': loadFiles().then(renderProcess); break;
+    case 'epic': S.epic = el.dataset.epic; renderRefinement(); break;
+    case 'filter': S.filter = el.dataset.f; renderRefinement(); break;
+    case 'approve': decide(id, 'APPROVED', h && h.estado_ui === 'decision' ? 'Aprobada desde la interfaz tras revisar la evidencia' : ''); break;
+    case 'reject': decide(id, 'REJECTED', 'Descartada desde la interfaz'); break;
+    case 'needinfo': { const rb = $(`#rb-${CSS.escape(id)}`); rb.classList.add('show'); rb.dataset.mode = 'info'; rb.querySelector('textarea').placeholder = '¿Qué información falta y quién debe darla?'; rb.querySelector('textarea').focus(); break; }
+    case 'refine': { const rb = $(`#rb-${CSS.escape(id)}`); rb.dataset.mode = 'refine'; rb.querySelector('textarea').placeholder = 'Ej. agrega que también valide nubosidad antes de iniciar'; rb.classList.toggle('show'); if (rb.classList.contains('show')) rb.querySelector('textarea').focus(); break; }
+    case 'send-refine': {
+      const rb = $(`#rb-${CSS.escape(id)}`), txt = rb.querySelector('textarea').value.trim(), prio = rb.querySelector('select').value, err = rb.querySelector('.err');
+      if (rb.dataset.mode === 'info') {
+        if (!txt) { err.textContent = 'Describe qué información falta.'; err.classList.add('show'); return; }
+        decide(id, 'NEEDS_MORE_INFORMATION', txt); break;
+      }
+      if (!txt && !prio) { err.textContent = 'Escribe qué quieres ajustar o elige una prioridad.'; err.classList.add('show'); return; }
+      err.classList.remove('show');
+      decide(id, 'MODIFIED', txt || `Cambiar la prioridad a ${prio}`, prio ? {priority: prio} : {}); break;
+    }
+    case 'toggle-orig': $(`#orig-${CSS.escape(id)}`).classList.toggle('show'); break;
+    case 'why': why(id); break;
+    case 'approve-epic': approveEpic(); break;
+    case 'open-story': S.epic = el.dataset.epic; S.filter = 'todas'; go(2); renderRefinement(); setTimeout(() => { const c = $(`#card-${CSS.escape(id)}`); if (c) c.scrollIntoView({behavior: 'smooth', block: 'center'}); }, 80); break;
+    case 'chat': openChat(); break;
+    case 'close-chat': closeChat(); break;
+    case 'send': send($('#chatInput').value); break;
+    case 'sug': send(el.textContent); break;
+    case 'close-modal': closeModal(); break;
+    case 'new-project': if (S.demo) toast('Modo demo: conecta el backend para crear proyectos', true); else newProjectForm(); break;
+    case 'create-project': createProject(); break;
+  }
+});
+$('#scrim').addEventListener('click', () => { closeModal(); closeChat(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeChat(); } });
+$('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e.target.value); } });
+$('#projSel').addEventListener('change', e => selectProject(e.target.value));
+$('#userName').addEventListener('change', e => { S.user = e.target.value.trim() || 'usuario'; store('spb.user', S.user); S.chat.session = null; });
+$('#fileInput').addEventListener('change', e => addFiles(e.target.files));
+const drop = $('#drop');
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+function addFiles(list) {
+  const permitidas = ['pdf', 'docx', 'pptx', 'xlsx', 'xlsm', 'csv', 'tsv', 'txt', 'md', 'html', 'htm', 'json', 'yaml', 'yml', 'xml', 'sql', 'log', 'py', 'mp3', 'wav', 'm4a'];
+  Array.from(list).forEach(f => {
+    if (S.pending.some(p => p.file.name === f.name && p.file.size === f.size)) return;
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    S.pending.push(permitidas.includes(ext) ? {file: f, estado: 'listo', mensaje: ''} : {file: f, estado: 'error', mensaje: `.${ext} no se puede analizar (convierte .doc a .docx o PDF)`});
+  });
+  $('#fileInput').value = '';
+  renderPending();
+}
+
+// ------------------------------------------------------------------ inicio
+(async function init() {
+  S.user = store('spb.user') || 'usuario';
+  $('#userName').value = S.user;
+  try { S.health = await api('/health'); S.online = true; } catch (e) { S.demo = true; }
+  renderTop();
+  try { await loadProjects(); } catch (e) { toast(e.message, true); }
+  const b = S.backlog;
+  go(b && b.historias.length ? (b.stats.decision ? 3 : 2) : 0);
+})();
+</script>
+</body>
+</html>

@@ -33,6 +33,7 @@ SYN = {
     "depends_on": ("depends_on", "dependencias", "dependencies", "depende_de", "depende de"),
     "estimate": ("estimate", "story_points", "puntos", "estimacion", "estimación", "sp"),
     "status": ("status", "estado"),
+    "priority": ("priority", "prioridad"),
     "approved": ("approved", "aprobada", "aprobado"),
 }
 APPROVED_STATUS = {"aprobada", "aprobado", "approved", "done", "terminada", "cerrada"}
@@ -67,6 +68,17 @@ def _parse_narrative(text: str) -> dict:
     return {}
 
 
+def _prioridad(v) -> str:
+    t = str(v or "").strip().lower()
+    if t in ("alta", "high", "1", "must", "crítica", "critica"):
+        return "Alta"
+    if t in ("media", "medium", "2", "should"):
+        return "Media"
+    if t in ("baja", "low", "3", "could"):
+        return "Baja"
+    return ""
+
+
 def story_from_dict(d: dict, doc: NormalizedDocument, project_id: str) -> UserStory | None:
     sid = _get(d, "story_id")
     if not sid:
@@ -96,6 +108,7 @@ def story_from_dict(d: dict, doc: NormalizedDocument, project_id: str) -> UserSt
         estimate=estimate,
         status=status,
         approved=approved,
+        priority=_prioridad(_get(d, "priority")),
         source=doc.uri,
         source_format=doc.format,
         signature=doc.signature,

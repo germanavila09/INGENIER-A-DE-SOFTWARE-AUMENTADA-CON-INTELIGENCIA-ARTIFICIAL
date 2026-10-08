@@ -32,6 +32,9 @@ backlog inicial de historias de usuario y devuelves un JSON que cumple el esquem
 - `depends_on` solo con IDs de otras historias generadas.
 - IDs: HU-IA-001, HU-IA-002, … Máximo {limite} historias, priorizando lo que los documentos
   respaldan con más claridad.
+- `priority` (Alta, Media o Baja) con `priority_reason`: es una RECOMENDACIÓN basada en lo
+  que dicen los documentos (urgencia, valor declarado, si otras historias dependen de ella).
+  Si los documentos no dan señales, usa Media y dilo en la justificación.
 - `confidence` por historia: qué tan respaldada está por los documentos (no su valor de negocio).
 
 ## Si hay historias generadas previamente

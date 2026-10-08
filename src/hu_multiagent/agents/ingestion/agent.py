@@ -14,7 +14,7 @@ from ...models.common import Statement, StatementType, stable_hash
 from ...models.project import DocumentCategory, ProjectManifest
 from ...models.state import WorkflowState
 from ...services.audit_service import AuditEntry
-from ...tools.project_tools import STORY_CATEGORIES, build_context, normalize_document
+from ...tools.project_tools import AUDIO_FORMATS, STORY_CATEGORIES, build_context, normalize_document
 from ...tools.story_tools import discover_stories
 from .prompt import DESCRIPTION
 
@@ -34,7 +34,7 @@ class DocumentIngestionAgent(BaseAgent):
         t0 = time.monotonic()
 
         docs = [normalize_document(eng.input, root, ref) for ref in manifest.documents
-                if ref.category != DocumentCategory.PROJECT_FILE]
+                if ref.category != DocumentCategory.PROJECT_FILE and ref.format not in AUDIO_FORMATS]
         stories, avisos = discover_stories(docs, pid, STORY_CATEGORIES)
 
         state = eng.state.load(pid)

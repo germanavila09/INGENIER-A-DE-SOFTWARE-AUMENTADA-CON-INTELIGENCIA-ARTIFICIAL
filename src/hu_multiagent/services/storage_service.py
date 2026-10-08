@@ -12,7 +12,7 @@ import threading
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterator
 
-from adk_ing.bucket import BucketReader, CarpetaLocal, ObjectInfo
+from adk_ing.bucket import BucketReader, CarpetaLocal, ObjectInfo, _safe_target
 
 from ..models.common import validate_project_id
 
@@ -55,6 +55,26 @@ class InputStorage:
 
     def read_bytes(self, rel: str) -> bytes:
         return self._reader.read_bytes(self.prefix + rel)
+
+    def exists(self, rel: str) -> bool:
+        if self.kind == "gcs":
+            return self._reader._bucket.blob(self.prefix + rel).exists()
+        return _safe_target(self._reader.raiz, rel).exists()
+
+    def write_bytes(self, rel: str, data: bytes, content_type: str | None = None) -> str:
+        """Agrega un archivo a la entrada. Solo lo usa la carga de documentos del front (SPB):
+        el flujo de análisis nunca escribe aquí. Requiere permiso de escritura en el bucket."""
+        p = PurePosixPath(rel)
+        if not rel or p.is_absolute() or ".." in p.parts or any(x.startswith(".") for x in p.parts):
+            raise ValueError(f"Ruta de entrada inválida: {rel!r}")
+        if self.kind == "gcs":
+            self._reader._bucket.blob(self.prefix + rel).upload_from_string(
+                data, content_type=content_type or "application/octet-stream")
+        else:
+            target = _safe_target(self._reader.raiz, rel)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        return self.uri_for(rel)
 
     def uri_for(self, rel: str) -> str:
         if self.kind == "gcs":

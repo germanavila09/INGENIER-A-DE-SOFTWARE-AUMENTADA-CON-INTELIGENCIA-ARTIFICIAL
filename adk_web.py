@@ -1,4 +1,4 @@
-"""Lanza ADK Web con el agente que consulta el bucket gs://adk_ing.
+"""Lanza ADK Web con los agentes del bucket gs://adk_ing y el Smart Product Backlog.
 
 Uso (desde cualquier carpeta, o con el botón Run de VS Code):
     python adk_web.py
@@ -7,7 +7,8 @@ Uso (desde cualquier carpeta, o con el botón Run de VS Code):
 Equivale a `adk web agents`, pero además:
   - carga el .env de la raíz del repo aunque VS Code ejecute desde otra carpeta,
   - revisa credenciales y permisos sobre el bucket antes de arrancar,
-  - abre el navegador cuando el servidor está listo.
+  - publica la API del Smart Product Backlog en /api y su interfaz en /spb,
+  - abre el navegador en /spb cuando el servidor está listo (/dev-ui sigue disponible).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 AGENTS_DIR = ROOT / "agents"
+SPB_HTML = ROOT / "web" / "spb" / "index.html"   # front del Smart Product Backlog
 
 # VS Code ejecuta desde su propia carpeta: se trabaja siempre desde la raíz del repo.
 os.chdir(ROOT)
@@ -115,23 +117,41 @@ def main() -> None:
 
     @asynccontextmanager
     async def lifespan(app):
-        print(f"\nADK Web listo en {url}  (Ctrl+C para detener)\n")
+        print(f"\nADK Web listo en {url}/dev-ui  (Ctrl+C para detener)")
+        print(f"Smart Product Backlog en {url}/spb\n")
         if not args.no_browser:
-            threading.Timer(1.0, webbrowser.open, args=(url,)).start()
+            threading.Timer(1.0, webbrowser.open, args=(f"{url}/spb",)).start()
         yield
 
-    app = get_fast_api_app(
-        agents_dir=str(AGENTS_DIR),
-        web=True,
-        host=args.host,
-        port=args.port,
-        lifespan=lifespan,
+    app = crear_app(host=args.host, port=args.port, lifespan=lifespan)
+    uvicorn.run(app, host=args.host, port=args.port)  # sin --reload: no funciona en Windows
+
+
+def crear_app(host: str = "127.0.0.1", port: int = 8000, lifespan=None, **kwargs):
+    """ADK Web (agentes + /dev-ui) + API del Smart Product Backlog (/api) + front (/spb)."""
+    from fastapi.responses import FileResponse, RedirectResponse
+
+    from hu_multiagent.api import router as spb_api
+
+    opciones = dict(
         # Opcionales: p. ej. ADK_ARTIFACT_URI=gs://adk_ing guarda en el bucket los archivos
         # que generen las sesiones (requiere permiso de escritura); vacío = carpeta local .adk
         artifact_service_uri=os.getenv("ADK_ARTIFACT_URI") or None,
         session_service_uri=os.getenv("ADK_SESSION_URI") or None,
     )
-    uvicorn.run(app, host=args.host, port=args.port)  # sin --reload: no funciona en Windows
+    opciones.update(kwargs)
+    app = get_fast_api_app(agents_dir=str(AGENTS_DIR), web=True, host=host, port=port, lifespan=lifespan, **opciones)
+    app.include_router(spb_api)
+
+    @app.get("/spb", include_in_schema=False)
+    def spb():
+        return FileResponse(SPB_HTML, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
+
+    @app.get("/spb/", include_in_schema=False)
+    def spb_slash():
+        return RedirectResponse("/spb")
+
+    return app
 
 
 if __name__ == "__main__":
