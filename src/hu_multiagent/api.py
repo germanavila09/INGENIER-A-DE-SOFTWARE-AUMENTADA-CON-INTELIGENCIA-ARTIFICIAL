@@ -355,14 +355,17 @@ def construir_backlog(eng, pid: str) -> dict:
     state = eng.state.load(pid)
     store = eng.results_store(pid)
     en_curso = _en_curso(pid)
-    gen = (store.read_json("generated/story_generation.json") or {}).get("output") or {}
+    generacion = store.read_json("generated/story_generation.json") or {}
+    gen = generacion.get("output") or {}
+    # Historias generadas que aún no se evalúan (p. ej. por el límite por ejecución): se muestran pendientes.
+    sin_evaluar = {d.get("story_id"): d for d in generacion.get("stories", [])}
     reporte = store.read_json("generated/reports/backlog_report.json") or {}
     orden = {sid: i for i, sid in enumerate(reporte.get("recommended_order", []))}
 
     historias = []
     for sid, rec in state.stories.items():
         base = f"generated/user_stories/{sid}"
-        original = store.read_json(f"{base}/original.json")
+        original = store.read_json(f"{base}/original.json") or sin_evaluar.get(sid)
         if not original:
             continue
         story = UserStory.model_validate(original)

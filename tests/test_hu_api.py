@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import dataclasses
 import io
 import shutil
 import sys
@@ -119,6 +120,7 @@ def test_flujo_completo_desde_la_interfaz(entorno):
     assert (h["HU-IA-001"]["prioridad"], h["HU-IA-002"]["prioridad"]) == ("Alta", "Media")
     assert h["HU-IA-001"]["prioridad_origen"] == "ia" and h["HU-IA-001"]["evidencia"]
     assert {x["estado_ui"] for x in h.values()} == {"revisar"}   # generadas: nunca automáticas
+    assert len(h) == 2
     assert h["HU-IA-001"]["propuesta"]["acceptance_criteria"] and h["HU-IA-001"]["pruebas"]
     assert b["stats"]["hu_ia"] == 1 and b["stats"]["generadas"] == 2 and b["resumen"]
 
@@ -214,3 +216,13 @@ def test_adk_web_publica_spb_y_api(monkeypatch, tmp_path):
         assert client.get("/api/health").json()["agente_chat"] == "orquestador_hu"
         assert client.get("/list-apps").json() == ["agente_bucket", "orquestador_hu"]
     set_engine(None)
+
+
+def test_backlog_muestra_las_generadas_que_faltan_por_evaluar(entorno):
+    client, _, eng = entorno
+    eng.settings = dataclasses.replace(eng.settings, max_stories_per_run=1)  # solo se evalúa una
+    client.post("/api/projects/SERVI_SINCHI/analyze", json={})
+    assert esperar(client, "SERVI_SINCHI")["trabajo"]["estado"] == "terminado"
+    h = {x["id"]: x for x in client.get("/api/projects/SERVI_SINCHI/backlog").json()["historias"]}
+    assert h["HU-IA-001"]["estado_ui"] == "revisar"
+    assert h["HU-IA-002"]["estado_ui"] == "pendiente" and h["HU-IA-002"]["titulo"]
