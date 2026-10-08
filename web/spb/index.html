@@ -680,8 +680,9 @@ function renderProcess() {
   const pr = S.progreso || {};
   const hist = (S.backlog && S.backlog.historias) || [];
   const run = S.proyecto && S.proyecto.ultima_ejecucion;
-  let idx = running ? Math.max(0, ETAPAS.indexOf(pr.etapa)) : (hist.length || (run && run.finished_at) ? 3 : -1);
-  if (S.job.estado === 'error' || pr.etapa === 'error') idx = Math.max(0, ETAPAS.indexOf(pr.etapa));
+  // etapa del motor → tarjeta activa: fuentes→«Contenido», historias→«Historias», evaluacion→«Evaluación»
+  const ACTIVA = {fuentes: 1, historias: 2, evaluacion: 3, terminado: 5};
+  const cur = running ? (ACTIVA[pr.etapa] ?? 0) : (S.job.estado === 'error' ? 1 : (hist.length || (run && run.finished_at) ? 5 : -1));
   if (running) {
     const txt = S.job.tipo === 'refinamiento' ? `Reanalizando ${esc(S.job.detalle)} con tu corrección` : 'Construyendo la propuesta';
     big.innerHTML = `<div class="loader"></div><h2>${txt}</h2><p>El orquestador coordina al analista de historias, al revisor de arquitectura y al agente de QA. Puedes seguir aquí o volver luego.</p>`;
@@ -693,7 +694,8 @@ function renderProcess() {
   } else {
     big.innerHTML = `<div class="bigicon idle">AI</div><h2>Aún no se ha analizado este proyecto</h2><p>Sube las fuentes en el paso 1 y presiona «Analizar proyecto».</p>`;
   }
-  const st = i => i < idx || (i === idx && !running && idx >= 0) ? 'done' : (i === idx && running ? 'active' : '');
+  const st = i => cur < 0 ? '' : i < cur ? 'done' : (i === cur && running ? 'active' : '');
+  const lbl = i => st(i) === 'done' ? 'Completo' : (st(i) === 'active' ? 'En curso' : 'Pendiente');
   const fuentes = S.files.filter(f => f.ruta !== 'project.yaml');
   const audios = fuentes.filter(f => f.audio), trans = audios.filter(f => f.transcrito).length;
   const generadas = hist.filter(h => h.origen === 'generated').length;
@@ -704,10 +706,10 @@ function renderProcess() {
   const bar = running && pr.etapa === 'evaluacion' && total ? `<div class="minibar"><i style="width:${Math.round(100 * hechas / total)}%"></i></div>` : '';
   const s = hist.length && !running ? S.backlog.stats : null;
   stg.innerHTML = [
-    stage(1, 'Fuentes recibidas', `${fuentes.length} archivo${fuentes.length === 1 ? '' : 's'} del proyecto${audios.length ? ` · ${trans}/${audios.length} audio${audios.length === 1 ? '' : 's'} transcrito${audios.length === 1 ? '' : 's'}` : ''}`, st(0) || (fuentes.length ? 'done' : ''), st(0) === 'active' ? 'Leyendo' : (fuentes.length ? 'Completo' : 'Pendiente')),
-    stage(2, 'Contenido estructurado', pr.documentos != null ? `${pr.documentos} documento${pr.documentos === 1 ? '' : 's'} normalizado${pr.documentos === 1 ? '' : 's'} y clasificado${pr.documentos === 1 ? '' : 's'} (actas, propuestas, arquitectura…)` : 'Texto de PDF, Word, PowerPoint, Excel y transcripciones', st(1), st(1) === 'done' ? 'Completo' : (st(1) ? 'En curso' : 'Pendiente')),
-    stage(3, 'Historias de usuario', hist.length ? `${hist.length} historias${generadas ? ` · ${generadas} propuestas por la IA desde actas y notas (con evidencia)` : ' tomadas de los documentos'}` : (pr.historias != null ? `${pr.historias} historias identificadas` : 'Si no hay historias escritas, el generador las propone citando la evidencia'), st(2), st(2) === 'done' ? 'Completo' : (st(2) ? 'En curso' : 'Pendiente')),
-    stage(4, 'Evaluación multiagente', evalTxt, st(3) === 'done' || (idx === 3 && !running) ? 'done' : (running && pr.etapa === 'evaluacion' ? 'active' : ''), running && pr.etapa === 'evaluacion' ? `${hechas}/${total}` : (hist.length ? 'Completo' : 'Pendiente'), bar),
+    stage(1, 'Fuentes recibidas', `${fuentes.length} archivo${fuentes.length === 1 ? '' : 's'} del proyecto${audios.length ? ` · ${trans}/${audios.length} audio${audios.length === 1 ? '' : 's'} transcrito${audios.length === 1 ? '' : 's'}` : ''}`, st(0) || (fuentes.length ? 'done' : ''), fuentes.length ? 'Completo' : 'Pendiente'),
+    stage(2, 'Contenido estructurado', pr.documentos != null ? `${pr.documentos} documento${pr.documentos === 1 ? '' : 's'} normalizado${pr.documentos === 1 ? '' : 's'} y clasificado${pr.documentos === 1 ? '' : 's'} (actas, propuestas, arquitectura…)` : 'Texto de PDF, Word, PowerPoint, Excel y transcripciones', st(1), lbl(1)),
+    stage(3, 'Historias de usuario', hist.length && !running ? `${hist.length} historias${generadas ? ` · ${generadas} propuestas por la IA desde actas y notas (con evidencia)` : ' tomadas de los documentos'}` : (st(2) === 'active' ? 'Buscando historias escritas; si no hay, el generador las propone citando la evidencia (puede tardar 1–2 min)' : (pr.historias != null ? `${pr.historias} historias identificadas` : 'Si no hay historias escritas, el generador las propone citando la evidencia')), st(2), lbl(2)),
+    stage(4, 'Evaluación multiagente', evalTxt, st(3), st(3) === 'active' && total ? `${hechas}/${total}` : lbl(3), bar),
     stage(5, 'Puntos de control humano', s ? `${s.decision} decisión(es) crítica(s) · ${s.revisar} historia(s) para revisar · ${s.listas} lista(s) sin observaciones` : 'Nivel 0 automático · nivel 1 revisar después · nivel 2 espera tu decisión', s && s.decision ? 'wait' : (s ? 'done' : ''), s ? (s.decision ? 'Te espera' : 'Al día') : 'Pendiente'),
   ].join('');
   $('#seeProposal').disabled = !hist.length;
@@ -967,8 +969,7 @@ async function send(text) {
       if (!r.ok) throw new Error('No se pudo abrir la sesión con el agente (' + r.status + ')');
       S.chat.session = (await r.json()).id;
     }
-    let msg = text;
-    if (S.pid && S.chat.pidCtx !== S.pid) { msg = `[Contexto de la interfaz SPB: el proyecto seleccionado es ${S.pid}. Quien decide se llama ${S.user}.]\n${text}`; S.chat.pidCtx = S.pid; }
+    const msg = S.pid ? `[Interfaz SPB · proyecto seleccionado: ${S.pid}]\n${text}` : text;
     const r = await fetch('/run_sse', {method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({appName: CHAT_APP, userId: uid, sessionId: S.chat.session, newMessage: {role: 'user', parts: [{text: msg}]}, streaming: false})});
     if (!r.ok) { let d = ''; try { d = (await r.json()).detail; } catch (e) { /* */ } throw new Error(d || `El agente respondió ${r.status}`); }
