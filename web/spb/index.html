@@ -1088,7 +1088,7 @@ document.addEventListener('click', e => {
     case 'approve': decide(id, 'APPROVED', h && h.estado_ui === 'decision' ? 'Aprobada desde la interfaz tras revisar la evidencia' : ''); break;
     case 'reject': decide(id, 'REJECTED', 'Descartada desde la interfaz'); break;
     case 'needinfo': { const rb = $(`#rb-${CSS.escape(id)}`); rb.classList.add('show'); rb.dataset.mode = 'info'; rb.querySelector('textarea').placeholder = '¿Qué información falta y quién debe darla?'; rb.querySelector('textarea').focus(); break; }
-    case 'refine': { const rb = $(`#rb-${CSS.escape(id)}`); rb.dataset.mode = 'refine'; rb.querySelector('textarea').placeholder = 'Ej. agrega que también valide nubosidad antes de iniciar'; rb.classList.toggle('show'); if (rb.classList.contains('show')) rb.querySelector('textarea').focus(); break; }
+    case 'refine': { const rb = $(`#rb-${CSS.escape(id)}`); rb.dataset.mode = 'refine'; rb.querySelector('textarea').placeholder = h && h.estado_ui === 'decision' ? 'Responde aquí las preguntas bloqueantes (o indica qué cambiar); los agentes reanalizan con tu respuesta' : 'Ej. agrega que también valide nubosidad antes de iniciar'; rb.classList.toggle('show'); if (rb.classList.contains('show')) rb.querySelector('textarea').focus(); break; }
     case 'send-refine': {
       const rb = $(`#rb-${CSS.escape(id)}`), txt = rb.querySelector('textarea').value.trim(), prio = rb.querySelector('select').value, err = rb.querySelector('.err');
       if (rb.dataset.mode === 'info') {
