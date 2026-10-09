@@ -1,0 +1,555 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Arquitectura del Orquestador HU</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Hoja técnica de un sistema: columna de lectura estrecha y figuras anchas a todo el ancho. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --ink: #1a2230;
+  --muted: #586274;
+  --line: #c6cdd8;
+  --edge: #3b4557;
+  --llm: #4553c9;
+  --llm-bg: #e8eaff;
+  --det: #26705f;
+  --det-bg: #e1f1eb;
+  --human: #b4521a;
+  --human-bg: #fcebdf;
+  --store-bg: #eceff4;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10141c; --surface: #171c26; --surface-2: #1d2430; --ink: #e5e9f1; --muted: #9aa4b8;
+    --line: #313b4e; --edge: #b9c2d3; --llm: #a3adff; --llm-bg: #222852; --det: #74d2b9;
+    --det-bg: #14322b; --human: #ff9f66; --human-bg: #3b2416; --store-bg: #1b212c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10141c; --surface: #171c26; --surface-2: #1d2430; --ink: #e5e9f1; --muted: #9aa4b8;
+  --line: #313b4e; --edge: #b9c2d3; --llm: #a3adff; --llm-bg: #222852; --det: #74d2b9;
+  --det-bg: #14322b; --human: #ff9f66; --human-bg: #3b2416; --store-bg: #1b212c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1140px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; }
+header { max-width: 760px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.15; letter-spacing: -.01em; margin: 0 0 14px; text-wrap: balance; font-weight: 700; }
+h2 { font-size: 22px; line-height: 1.25; margin: 0 0 8px; text-wrap: balance; font-weight: 600; }
+h2 .n { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--muted); margin-right: 10px; vertical-align: 2px; }
+p { margin: 0; max-width: 68ch; }
+.lede { font-size: 17px; color: var(--ink); }
+.lede + .lede { margin-top: 10px; color: var(--muted); font-size: 15px; }
+code, .mono { font-family: var(--mono); font-size: .92em; }
+section { margin-top: 56px; display: grid; gap: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 26px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 26px; height: 16px; border-radius: 4px; border: 1.5px solid; flex: none; }
+.sw.llm { background: var(--llm-bg); border-color: var(--llm); }
+.sw.det { background: var(--det-bg); border-color: var(--det); }
+.sw.tool { background: var(--surface-2); border-color: var(--line); border-radius: 9px; }
+.sw.store { background: var(--store-bg); border-color: var(--muted); }
+.sw.human { background: var(--human-bg); border-color: var(--human); }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 14px; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+figure svg { display: block; width: 100%; min-width: 860px; height: auto; font-family: var(--sans); color: var(--edge); }
+figure svg.wide { min-width: 1000px; }
+figcaption { margin-top: 12px; font-size: 13.5px; color: var(--muted); max-width: 92ch; }
+/* Piezas del dibujo */
+.b-llm { fill: var(--llm-bg); stroke: var(--llm); stroke-width: 1.5; }
+.b-det { fill: var(--det-bg); stroke: var(--det); stroke-width: 1.5; }
+.b-human { fill: var(--human-bg); stroke: var(--human); stroke-width: 1.5; }
+.b-store { fill: var(--store-bg); stroke: var(--muted); stroke-width: 1.2; }
+.b-plain { fill: var(--surface); stroke: var(--line); stroke-width: 1.3; }
+.b-tool { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; }
+.group { fill: none; stroke: var(--line); stroke-width: 1.3; stroke-dasharray: 6 5; }
+.band { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; }
+.guard { fill: var(--human-bg); stroke: var(--human); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.t { fill: var(--ink); font-size: 13px; font-weight: 600; }
+.tm { fill: var(--ink); font-family: var(--mono); font-size: 11.5px; font-weight: 500; }
+.s { fill: var(--muted); font-size: 11px; }
+.sm { fill: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+.mono-t { font-family: var(--mono); font-weight: 500; }
+.k { fill: var(--llm); font-family: var(--mono); font-size: 11px; }
+.kd { fill: var(--det); font-family: var(--mono); font-size: 11px; }
+.lay { fill: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .08em; }
+.lbl { fill: var(--muted); font-size: 11px; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.lbl-h { fill: var(--human); font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.e { fill: none; stroke: var(--edge); stroke-width: 1.4; }
+.e-h { fill: none; stroke: var(--human); stroke-width: 1.6; }
+.e-d { fill: none; stroke: var(--edge); stroke-width: 1.3; stroke-dasharray: 4 4; }
+.ah { fill: var(--edge); }
+.ah-h { fill: var(--human); }
+/* Tablas y listas */
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; min-width: 820px; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.tag.llm { color: var(--llm); background: var(--llm-bg); border-color: var(--llm); }
+.tag.det { color: var(--det); background: var(--det-bg); border-color: var(--det); }
+.levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.level { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.level h3 { margin: 0 0 6px; font-size: 14.5px; }
+.level h3 small { display: block; font-family: var(--mono); font-weight: 500; font-size: 11.5px; color: var(--muted); }
+.level.l2 { border-color: var(--human); }
+.level.l2 h3 { color: var(--human); }
+.level ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--muted); }
+.level li + li { margin-top: 3px; }
+footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">adk_ing · Ingeniería de Software Aumentada con IA · Google ADK 2.11 + Gemini</p>
+    <h1>Arquitectura del Orquestador HU</h1>
+    <p class="lede">El LLM conversa y delega; el flujo lo controla el código. El orquestador decide qué herramienta usar, pero el orden de los pasos, la máquina de estados, los límites y las pausas para decisión humana viven en el motor <code>HuEngine</code> y en agentes ADK de flujo fijo.</p>
+    <p class="lede">Cuatro vistas, de la más general a la más detallada: dónde corre cada pieza, qué herramientas tiene cada agente, cómo se orquesta un análisis y cómo avanza cada historia hasta que una persona decide.</p>
+  </header>
+
+  <div class="legend" aria-label="Convenciones de los diagramas">
+    <span><i class="sw llm"></i>Agente LLM (llama a Gemini)</span>
+    <span><i class="sw det"></i>Agente o componente determinista (código)</span>
+    <span><i class="sw tool"></i>Herramienta (tool)</span>
+    <span><i class="sw store"></i>Datos o modelo externo</span>
+    <span><i class="sw human"></i>Persona o paso que solo dispara un humano</span>
+  </div>
+
+  <!-- ===================================================== 1 · VISTA GENERAL -->
+  <section id="vista-general">
+    <h2><span class="n">1</span>Dos entradas, un solo motor</h2>
+    <p>Un único proceso (<code>python adk_web.py</code>) sirve la interfaz, la API REST y los agentes de ADK. Tanto la interfaz como el chat terminan llamando a la misma instancia del motor.</p>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1000 612" role="img" aria-label="La interfaz Smart Product Backlog usa la API REST y el chat usa el Runner de ADK; ambos llegan al mismo HuEngine, que lee el bucket gs://adk_ing, llama a Gemini a través de los flujos ADK y escribe estado, versiones y auditoría en salidas_hu.">
+        <defs>
+          <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <!-- etiquetas de capa -->
+        <text class="lay" x="20" y="59">INTERFAZ</text>
+        <text class="lay" x="20" y="166">SERVIDOR</text>
+        <text class="lay" x="20" y="294">API Y AGENTES</text>
+        <text class="lay" x="20" y="441">MOTOR</text>
+        <text class="lay" x="20" y="559">DATOS Y MODELO</text>
+
+        <!-- interfaz -->
+        <rect class="b-plain" x="150" y="25" width="300" height="60" rx="8"/>
+        <text class="t" x="300" y="50" text-anchor="middle">Smart Product Backlog</text>
+        <text class="s" x="300" y="70" text-anchor="middle">/spb · interfaz del dueño de producto</text>
+        <rect class="b-plain" x="680" y="25" width="300" height="60" rx="8"/>
+        <text class="t" x="830" y="50" text-anchor="middle">ADK Web</text>
+        <text class="s" x="830" y="70" text-anchor="middle">/dev-ui · chat para probar los agentes</text>
+
+        <!-- servidor -->
+        <rect class="band" x="150" y="130" width="830" height="64" rx="8"/>
+        <rect class="b-tool" x="245" y="146" width="110" height="32" rx="16"/>
+        <text class="tm" x="300" y="166" text-anchor="middle">/api/*</text>
+        <rect class="b-tool" x="775" y="146" width="110" height="32" rx="16"/>
+        <text class="tm" x="830" y="166" text-anchor="middle">/run_sse</text>
+        <text class="t" x="565" y="158" text-anchor="middle">adk_web.py · FastAPI + Uvicorn</text>
+        <text class="s" x="565" y="176" text-anchor="middle">un proceso para la interfaz, la API y los agentes</text>
+
+        <line class="e" x1="300" y1="85" x2="300" y2="144" marker-end="url(#a1)"/>
+        <text class="lbl" x="310" y="119">REST JSON</text>
+        <line class="e" x1="440" y1="85" x2="788" y2="145" marker-end="url(#a1)"/>
+        <text class="lbl" x="612" y="108" text-anchor="middle">asistente del /spb</text>
+        <line class="e" x1="830" y1="85" x2="830" y2="144" marker-end="url(#a1)"/>
+        <text class="lbl" x="840" y="119">chat</text>
+
+        <!-- api y agentes -->
+        <rect class="b-plain" x="150" y="245" width="300" height="90" rx="8"/>
+        <text class="t" x="300" y="270" text-anchor="middle">API del SPB · <tspan class="mono-t">api.py</tspan></text>
+        <text class="s" x="300" y="291" text-anchor="middle">proyectos · archivos · audio → texto</text>
+        <text class="s" x="300" y="308" text-anchor="middle">análisis y refinamiento en segundo plano</text>
+        <text class="s" x="300" y="325" text-anchor="middle">backlog · decisiones · exportar CSV/JSON</text>
+
+        <rect class="b-llm" x="540" y="245" width="220" height="90" rx="8"/>
+        <text class="tm" x="650" y="270" text-anchor="middle">orchestrator_agent</text>
+        <text class="s" x="650" y="291" text-anchor="middle">app orquestador_hu</text>
+        <text class="s" x="650" y="308" text-anchor="middle">6 tools + 1 AgentTool</text>
+        <text class="s" x="650" y="325" text-anchor="middle">no ejecuta el flujo: delega</text>
+
+        <rect class="b-llm" x="830" y="245" width="150" height="90" rx="8"/>
+        <text class="tm" x="905" y="270" text-anchor="middle">agente_documentos</text>
+        <text class="s" x="905" y="291" text-anchor="middle">también es la app</text>
+        <text class="s" x="905" y="308" text-anchor="middle">agente_bucket</text>
+        <text class="s" x="905" y="325" text-anchor="middle">5 tools de lectura</text>
+
+        <line class="e" x1="300" y1="178" x2="300" y2="243" marker-end="url(#a1)"/>
+        <line class="e" x1="812" y1="178" x2="682" y2="243" marker-end="url(#a1)"/>
+        <text class="lbl" x="735" y="214" text-anchor="end">Runner ADK</text>
+        <line class="e" x1="760" y1="290" x2="828" y2="290" marker-end="url(#a1)"/>
+        <text class="lbl" x="795" y="282" text-anchor="middle">AgentTool</text>
+
+        <!-- motor -->
+        <rect class="b-det" x="150" y="395" width="630" height="84" rx="8"/>
+        <text class="t" x="465" y="419" text-anchor="middle">HuEngine · motor determinista (una instancia: get_engine())</text>
+        <rect class="b-tool" x="177" y="436" width="120" height="26" rx="13"/><text class="s" x="237" y="453" text-anchor="middle">máquina de estados</text>
+        <rect class="b-tool" x="307" y="436" width="125" height="26" rx="13"/><text class="s" x="369.5" y="453" text-anchor="middle">límites y reintentos</text>
+        <rect class="b-tool" x="442" y="436" width="150" height="26" rx="13"/><text class="s" x="517" y="453" text-anchor="middle">pausa y reanudación HITL</text>
+        <rect class="b-tool" x="602" y="436" width="72" height="26" rx="13"/><text class="s" x="638" y="453" text-anchor="middle">versiones</text>
+        <rect class="b-tool" x="684" y="436" width="70" height="26" rx="13"/><text class="s" x="719" y="453" text-anchor="middle">auditoría</text>
+
+        <line class="e" x1="300" y1="335" x2="300" y2="393" marker-end="url(#a1)"/>
+        <text class="lbl" x="310" y="368">llama métodos</text>
+        <line class="e" x1="650" y1="335" x2="650" y2="393" marker-end="url(#a1)"/>
+        <text class="lbl" x="660" y="368">tools → métodos</text>
+
+        <!-- datos -->
+        <rect class="b-store" x="150" y="520" width="280" height="72" rx="8"/>
+        <text class="tm" x="290" y="545" text-anchor="middle">salidas_hu · HU_RESULTS_URI</text>
+        <text class="s" x="290" y="564" text-anchor="middle">estado · versiones · auditoría · reportes</text>
+        <text class="s" x="290" y="580" text-anchor="middle">separado de la entrada (local o gs://)</text>
+        <rect class="b-store" x="470" y="520" width="200" height="72" rx="8"/>
+        <text class="t" x="570" y="545" text-anchor="middle">Vertex AI · Gemini</text>
+        <text class="sm" x="570" y="564" text-anchor="middle">gemini-2.5-flash</text>
+        <text class="s" x="570" y="580" text-anchor="middle">agentes LLM y transcripción</text>
+        <rect class="b-store" x="710" y="520" width="270" height="72" rx="8"/>
+        <text class="tm" x="845" y="545" text-anchor="middle">gs://adk_ing</text>
+        <text class="s" x="845" y="564" text-anchor="middle">documentos de cada proyecto</text>
+        <text class="s" x="845" y="580" text-anchor="middle">lectura (solo /spb escribe al subir)</text>
+
+        <line class="e" x1="290" y1="479" x2="290" y2="518" marker-end="url(#a1)"/>
+        <text class="lbl" x="300" y="503">escribe</text>
+        <line class="e" x1="570" y1="479" x2="570" y2="518" marker-end="url(#a1)"/>
+        <text class="lbl" x="580" y="503">flujos ADK</text>
+        <line class="e" x1="745" y1="479" x2="745" y2="518" marker-end="url(#a1)"/>
+        <text class="lbl" x="735" y="503" text-anchor="end">lee</text>
+        <line class="e" x1="905" y1="335" x2="905" y2="518" marker-end="url(#a1)"/>
+        <text class="lbl" x="895" y="430" text-anchor="end">busca y lee</text>
+      </svg>
+      </div>
+      <figcaption>La interfaz entra por <code>/api</code> y el chat por <code>/run_sse</code>, pero los dos llegan a la misma instancia de <code>HuEngine</code>, la única que mueve estados y escribe resultados. Por eso una decisión tomada en el chat aparece en el SPB al recargar. El agente de documentos es la excepción: lee el bucket directamente y no cambia el estado del flujo.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===================================================== 2 · AGENTES Y TOOLS -->
+  <section id="tools">
+    <h2><span class="n">2</span>Qué herramientas tiene cada agente conversacional</h2>
+    <p>El orquestador tiene siete herramientas. Seis son funciones Python que llaman un método del motor; la séptima es otro agente envuelto como herramienta (<code>AgentTool</code>), con sus propias herramientas de lectura.</p>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1000 590" role="img" aria-label="El orchestrator_agent recibe el mensaje de la persona; cada llamada a herramienta pasa por guardia_orquestador. Seis herramientas llaman métodos de HuEngine y agente_documentos es un AgentTool con cinco herramientas de lectura sobre gs://adk_ing.">
+        <defs>
+          <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="a2h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-h" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <!-- persona y orquestador -->
+        <rect class="b-human" x="20" y="40" width="200" height="60" rx="8"/>
+        <text class="t" x="120" y="65" text-anchor="middle">Persona</text>
+        <text class="s" x="120" y="84" text-anchor="middle">chat ADK Web o asistente SPB</text>
+        <line class="e" x1="120" y1="100" x2="120" y2="198" marker-end="url(#a2)"/>
+        <text class="lbl" x="130" y="152">mensaje</text>
+
+        <rect class="b-llm" x="20" y="200" width="200" height="112" rx="8"/>
+        <text class="tm" x="120" y="226" text-anchor="middle">orchestrator_agent</text>
+        <text class="s" x="120" y="246" text-anchor="middle">Gemini 2.5 Flash · temp. 0,1</text>
+        <text class="s" x="120" y="264" text-anchor="middle">elige la herramienta,</text>
+        <text class="s" x="120" y="280" text-anchor="middle">pide aclaraciones</text>
+        <text class="s" x="120" y="296" text-anchor="middle">y resume el resultado</text>
+
+        <!-- guardia: toda llamada cruza esta banda -->
+        <rect class="guard" x="252" y="30" width="34" height="480" rx="6"/>
+        <text class="lbl-h" transform="translate(274 270) rotate(-90)" text-anchor="middle">guardia_orquestador · before_tool_callback · máx. 10 tools por turno</text>
+
+        <!-- abanico de llamadas: salen de la guardia -->
+        <line class="e" x1="220" y1="256" x2="250" y2="256" marker-end="url(#a2)"/>
+        <line class="e" x1="286" y1="256" x2="318" y2="80" marker-end="url(#a2)"/>
+        <line class="e" x1="286" y1="256" x2="318" y2="125" marker-end="url(#a2)"/>
+        <line class="e" x1="286" y1="256" x2="318" y2="170" marker-end="url(#a2)"/>
+        <line class="e" x1="286" y1="256" x2="318" y2="215" marker-end="url(#a2)"/>
+        <line class="e" x1="286" y1="256" x2="318" y2="260" marker-end="url(#a2)"/>
+        <line class="e-h" x1="286" y1="256" x2="318" y2="305" marker-end="url(#a2h)"/>
+        <line class="e" x1="286" y1="256" x2="318" y2="420" marker-end="url(#a2)"/>
+
+        <!-- tools del orquestador -->
+        <rect class="b-tool" x="320" y="63" width="240" height="34" rx="17"/><text class="tm" x="440" y="84" text-anchor="middle">descubrir_proyectos</text>
+        <rect class="b-tool" x="320" y="108" width="240" height="34" rx="17"/><text class="tm" x="440" y="129" text-anchor="middle">analizar_proyecto</text>
+        <rect class="b-tool" x="320" y="153" width="240" height="34" rx="17"/><text class="tm" x="440" y="174" text-anchor="middle">estado_proyecto</text>
+        <rect class="b-tool" x="320" y="198" width="240" height="34" rx="17"/><text class="tm" x="440" y="219" text-anchor="middle">explicar_historia</text>
+        <rect class="b-tool" x="320" y="243" width="240" height="34" rx="17"/><text class="tm" x="440" y="264" text-anchor="middle">listar_decisiones_pendientes</text>
+        <rect class="b-human" x="320" y="288" width="240" height="34" rx="17"/><text class="tm" x="440" y="309" text-anchor="middle">registrar_decision_humana</text>
+        <text class="lbl-h" x="322" y="340">solo si el mensaje del usuario trae</text>
+        <text class="lbl-h" x="322" y="355">la decisión y el decision_id</text>
+        <rect class="b-llm" x="320" y="403" width="240" height="34" rx="17"/><text class="tm" x="440" y="424" text-anchor="middle">agente_documentos · AgentTool</text>
+
+        <!-- motor -->
+        <rect class="b-det" x="620" y="20" width="360" height="318" rx="8"/>
+        <text class="t" x="800" y="46" text-anchor="middle">HuEngine</text>
+        <rect class="b-plain" x="660" y="65" width="280" height="30" rx="6"/><text class="tm" x="800" y="84" text-anchor="middle">discover()</text>
+        <rect class="b-plain" x="660" y="110" width="280" height="30" rx="6"/><text class="tm" x="800" y="129" text-anchor="middle">analyze_project()</text>
+        <rect class="b-plain" x="660" y="155" width="280" height="30" rx="6"/><text class="tm" x="800" y="174" text-anchor="middle">project_status()</text>
+        <rect class="b-plain" x="660" y="200" width="280" height="30" rx="6"/><text class="tm" x="800" y="219" text-anchor="middle">explain_story()</text>
+        <rect class="b-plain" x="660" y="245" width="280" height="30" rx="6"/><text class="tm" x="800" y="264" text-anchor="middle">pending_decisions()</text>
+        <rect class="b-plain" x="660" y="290" width="280" height="30" rx="6"/><text class="tm" x="800" y="309" text-anchor="middle">apply_decision() → reanuda el flujo</text>
+        <line class="e" x1="560" y1="80" x2="658" y2="80" marker-end="url(#a2)"/>
+        <line class="e" x1="560" y1="125" x2="658" y2="125" marker-end="url(#a2)"/>
+        <line class="e" x1="560" y1="170" x2="658" y2="170" marker-end="url(#a2)"/>
+        <line class="e" x1="560" y1="215" x2="658" y2="215" marker-end="url(#a2)"/>
+        <line class="e" x1="560" y1="260" x2="658" y2="260" marker-end="url(#a2)"/>
+        <line class="e-h" x1="560" y1="305" x2="658" y2="305" marker-end="url(#a2h)"/>
+
+        <!-- agente de documentos -->
+        <rect class="b-llm" x="620" y="360" width="360" height="192" rx="8"/>
+        <text class="t" x="800" y="384" text-anchor="middle">agente_documentos (LLM)</text>
+        <rect class="b-tool" x="640" y="398" width="320" height="26" rx="13"/><text class="sm" x="800" y="415" text-anchor="middle">buscar_en_documentos · BM25 por contenido</text>
+        <rect class="b-tool" x="640" y="428" width="320" height="26" rx="13"/><text class="sm" x="800" y="445" text-anchor="middle">leer_documento · por página, hoja o diapositiva</text>
+        <rect class="b-tool" x="640" y="458" width="320" height="26" rx="13"/><text class="sm" x="800" y="475" text-anchor="middle">listar_documentos</text>
+        <rect class="b-tool" x="640" y="488" width="320" height="26" rx="13"/><text class="sm" x="800" y="505" text-anchor="middle">estado_del_indice</text>
+        <rect class="b-tool" x="640" y="518" width="320" height="26" rx="13"/><text class="sm" x="800" y="535" text-anchor="middle">consultar_documento_con_gemini · escaneados</text>
+        <line class="e" x1="560" y1="420" x2="618" y2="420" marker-end="url(#a2)"/>
+        <text class="s" x="800" y="578" text-anchor="middle">lee gs://adk_ing · el índice detecta documentos nuevos cada 30 s</text>
+        <text class="s" x="440" y="460" text-anchor="middle">responde con citas</text>
+        <text class="s" x="440" y="475" text-anchor="middle">(documento y página)</text>
+      </svg>
+      </div>
+      <figcaption>Toda llamada del orquestador cruza la guardia: corta el turno después de 10 herramientas y bloquea <code>registrar_decision_humana</code> si el último mensaje del usuario no contiene la decisión (APPROVED, REJECTED, MODIFIED o NEEDS_MORE_INFORMATION) y el <code>decision_id</code>. Así el modelo no puede aprobar por su cuenta.</figcaption>
+    </figure>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Agente</th><th>Tipo</th><th>Dónde corre</th><th>Lee</th><th>Escribe</th><th>Protección</th></tr></thead>
+        <tbody>
+          <tr><td>orchestrator_agent</td><td><span class="tag llm">LLM</span></td><td>app <code>orquestador_hu</code> (chat)</td><td>mensaje del usuario</td><td>respuesta y llamadas a tools</td><td><code>guardia_orquestador</code></td></tr>
+          <tr><td>agente_documentos</td><td><span class="tag llm">LLM</span></td><td>AgentTool del orquestador y app <code>agente_bucket</code></td><td>pregunta en lenguaje natural</td><td>respuesta con citas</td><td>solo lectura</td></tr>
+          <tr><td>project_discovery_agent</td><td><span class="tag det">determinista</span></td><td><code>project_workflow</code></td><td>archivos del proyecto</td><td>manifest con firmas</td><td>solo su carpeta o prefijo</td></tr>
+          <tr><td>document_ingestion_agent</td><td><span class="tag det">determinista</span></td><td><code>project_workflow</code></td><td>manifest</td><td>documentos normalizados, historias escritas, ProjectContext</td><td>omite audios y usa su transcripción</td></tr>
+          <tr><td>story_generator_agent</td><td><span class="tag llm">LLM</span></td><td>motor, solo si no hay historias escritas</td><td>documentos del proyecto (hasta 150 mil caracteres)</td><td><code>story_generation</code></td><td><code>guardia_generacion</code> · <code>acotar_confianza</code></td></tr>
+          <tr><td>story_analyst_agent</td><td><span class="tag llm">LLM</span></td><td><code>story_workflow</code></td><td>current_story · project_context · human_feedback</td><td><code>story_analysis</code></td><td><code>guardia_de_proyecto</code> · <code>sellar_salida</code></td></tr>
+          <tr><td>architecture_agent</td><td><span class="tag llm">LLM</span></td><td><code>parallel_review</code></td><td>historia · story_analysis · contexto</td><td><code>architecture_review</code></td><td>igual que el analista</td></tr>
+          <tr><td>qa_agent</td><td><span class="tag llm">LLM</span></td><td><code>parallel_review</code></td><td>historia · story_analysis · contexto</td><td><code>qa_review</code></td><td>igual que el analista</td></tr>
+          <tr><td>review_aggregator_agent</td><td><span class="tag det">determinista</span></td><td><code>story_workflow</code></td><td>las tres revisiones</td><td><code>aggregated_review</code></td><td>confianza = la mínima</td></tr>
+          <tr><td>hitl_evaluator_agent</td><td><span class="tag det">determinista</span></td><td><code>story_workflow</code></td><td>aggregated_review</td><td><code>hitl_evaluation</code></td><td>reglas de <code>policy.py</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:13.5px;color:var(--muted)">Los agentes LLM de los flujos usan <code>output_schema</code> (Pydantic) para devolver JSON validado e <code>include_contents="none"</code>: no ven la conversación, solo lo que el motor pone en el estado de la sesión. <code>guardia_de_proyecto</code> impide trabajar con datos de otro proyecto y <code>sellar_salida</code> normaliza la salida al contrato común <code>AgentResponse</code>.</p>
+  </section>
+
+  <!-- ===================================================== 3 · ORQUESTACIÓN -->
+  <section id="orquestacion">
+    <h2><span class="n">3</span>Qué pasa cuando se analiza un proyecto</h2>
+    <p><code>analizar_proyecto</code> (chat) y <code>POST /api/projects/{id}/analyze</code> (SPB) ejecutan lo mismo: <code>HuEngine.analyze_project()</code>. Primero corre un flujo por proyecto y después un flujo por cada historia seleccionada.</p>
+    <figure>
+      <div class="scroll">
+      <svg class="wide" viewBox="0 0 1100 700" role="img" aria-label="project_workflow descubre e ingesta los documentos; si no hay historias escritas, story_generator_agent las propone. El motor selecciona hasta 10 historias y, por cada una, story_workflow ejecuta el analista, arquitectura y QA en paralelo, el agregador y el evaluador HITL; el motor aplica el nivel 0, 1 o 2.">
+        <defs>
+          <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="a3h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-h" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <text class="lay" x="20" y="22">POR PROYECTO · UNA VEZ POR EJECUCIÓN</text>
+
+        <!-- project_workflow -->
+        <rect class="group" x="20" y="36" width="430" height="150" rx="10"/>
+        <text class="sm" x="36" y="56">project_workflow · SequentialAgent</text>
+        <rect class="b-det" x="40" y="80" width="180" height="80" rx="8"/>
+        <text class="tm" x="130" y="105" text-anchor="middle">project_discovery_agent</text>
+        <text class="s" x="130" y="125" text-anchor="middle">manifest de archivos</text>
+        <text class="s" x="130" y="141" text-anchor="middle">con firmas (detecta cambios)</text>
+        <rect class="b-det" x="250" y="80" width="180" height="80" rx="8"/>
+        <text class="tm" x="340" y="105" text-anchor="middle">document_ingestion_agent</text>
+        <text class="s" x="340" y="125" text-anchor="middle">normaliza documentos</text>
+        <text class="s" x="340" y="141" text-anchor="middle">y arma el contexto</text>
+        <line class="e" x1="220" y1="120" x2="248" y2="120" marker-end="url(#a3)"/>
+
+        <!-- decisión -->
+        <polygon class="b-plain" points="580,65 665,120 580,175 495,120"/>
+        <text class="t" x="580" y="116" text-anchor="middle">¿hay historias</text>
+        <text class="t" x="580" y="132" text-anchor="middle">escritas?</text>
+        <line class="e" x1="430" y1="120" x2="493" y2="120" marker-end="url(#a3)"/>
+        <text class="lbl" x="472" y="108" text-anchor="middle">contexto</text>
+
+        <rect class="b-plain" x="740" y="40" width="200" height="60" rx="8"/>
+        <text class="t" x="840" y="64" text-anchor="middle">extraer historias</text>
+        <text class="s" x="840" y="84" text-anchor="middle">tablas, .md, .yaml, .docx</text>
+        <line class="e" x1="622" y1="92" x2="738" y2="72" marker-end="url(#a3)"/>
+        <text class="lbl" x="680" y="74" text-anchor="middle">sí</text>
+
+        <rect class="b-llm" x="740" y="140" width="200" height="70" rx="8"/>
+        <text class="tm" x="840" y="164" text-anchor="middle">story_generator_agent</text>
+        <text class="s" x="840" y="183" text-anchor="middle">propone HU-IA con evidencia,</text>
+        <text class="s" x="840" y="199" text-anchor="middle">prioridad y preguntas abiertas</text>
+        <line class="e" x1="622" y1="148" x2="738" y2="174" marker-end="url(#a3)"/>
+        <text class="lbl" x="682" y="184" text-anchor="middle">no (actas, notas)</text>
+
+        <rect class="b-det" x="968" y="80" width="114" height="90" rx="8"/>
+        <text class="t" x="1025" y="104" text-anchor="middle">selección</text>
+        <text class="s" x="1025" y="123" text-anchor="middle">nuevas, cambiadas</text>
+        <text class="s" x="1025" y="139" text-anchor="middle">o MODIFIED</text>
+        <text class="s" x="1025" y="155" text-anchor="middle">máx. 10</text>
+        <line class="e" x1="940" y1="70" x2="966" y2="102" marker-end="url(#a3)"/>
+        <line class="e" x1="940" y1="175" x2="966" y2="150" marker-end="url(#a3)"/>
+
+        <!-- bucle por historia -->
+        <path class="e" d="M1025 170 V222 H125 V298" marker-end="url(#a3)"/>
+        <text class="lbl" x="575" y="216" text-anchor="middle">por cada historia seleccionada, una tras otra</text>
+
+        <!-- story_workflow -->
+        <rect class="group" x="20" y="258" width="1062" height="220" rx="10"/>
+        <text class="sm" x="236" y="280">story_workflow · SequentialAgent</text>
+
+        <rect class="b-plain" x="40" y="300" width="160" height="140" rx="8"/>
+        <text class="t" x="120" y="322" text-anchor="middle">estado de sesión</text>
+        <text class="tm" x="120" y="346" text-anchor="middle">current_story</text>
+        <text class="tm" x="120" y="368" text-anchor="middle">project_context</text>
+        <text class="s" x="120" y="384" text-anchor="middle">solo este proyecto</text>
+        <text class="tm" x="120" y="408" text-anchor="middle">human_feedback</text>
+        <text class="s" x="120" y="424" text-anchor="middle">si hubo MODIFIED</text>
+
+        <rect class="b-llm" x="235" y="315" width="180" height="104" rx="8"/>
+        <text class="tm" x="325" y="340" text-anchor="middle">story_analyst_agent</text>
+        <text class="s" x="325" y="360" text-anchor="middle">INVEST, ambigüedades</text>
+        <text class="s" x="325" y="376" text-anchor="middle">y preguntas bloqueantes</text>
+        <text class="k" x="325" y="404" text-anchor="middle">→ story_analysis</text>
+
+        <rect class="group" x="470" y="292" width="220" height="172" rx="10"/>
+        <text class="sm" x="580" y="307" text-anchor="middle">parallel_review · ParallelAgent</text>
+        <rect class="b-llm" x="482" y="314" width="196" height="66" rx="8"/>
+        <text class="tm" x="580" y="336" text-anchor="middle">architecture_agent</text>
+        <text class="s" x="580" y="353" text-anchor="middle">impactos y cambios críticos</text>
+        <text class="k" x="580" y="371" text-anchor="middle">→ architecture_review</text>
+        <rect class="b-llm" x="482" y="390" width="196" height="66" rx="8"/>
+        <text class="tm" x="580" y="412" text-anchor="middle">qa_agent</text>
+        <text class="s" x="580" y="429" text-anchor="middle">casos de prueba y criterios</text>
+        <text class="k" x="580" y="447" text-anchor="middle">→ qa_review</text>
+
+        <rect class="b-det" x="745" y="315" width="170" height="104" rx="8"/>
+        <text class="tm" x="830" y="340" text-anchor="middle" style="font-size:11px">review_aggregator_agent</text>
+        <text class="s" x="830" y="360" text-anchor="middle">detecta conflictos</text>
+        <text class="s" x="830" y="376" text-anchor="middle">y toma la confianza mínima</text>
+        <text class="kd" x="830" y="404" text-anchor="middle">→ aggregated_review</text>
+
+        <rect class="b-det" x="935" y="315" width="140" height="104" rx="8"/>
+        <text class="tm" x="1005" y="340" text-anchor="middle" style="font-size:10.5px">hitl_evaluator_agent</text>
+        <text class="s" x="1005" y="360" text-anchor="middle">reglas de policy.py</text>
+        <text class="s" x="1005" y="376" text-anchor="middle">→ nivel 0, 1 o 2</text>
+        <text class="kd" x="1005" y="404" text-anchor="middle">→ hitl_evaluation</text>
+
+        <line class="e" x1="200" y1="367" x2="233" y2="367" marker-end="url(#a3)"/>
+        <line class="e" x1="415" y1="367" x2="468" y2="367" marker-end="url(#a3)"/>
+        <line class="e" x1="690" y1="367" x2="743" y2="367" marker-end="url(#a3)"/>
+        <line class="e" x1="915" y1="367" x2="933" y2="367" marker-end="url(#a3)"/>
+
+        <!-- resultado -->
+        <line class="e" x1="1005" y1="419" x2="1005" y2="503" marker-end="url(#a3)"/>
+        <rect class="b-det" x="640" y="505" width="440" height="56" rx="8"/>
+        <text class="t" x="860" y="528" text-anchor="middle">HuEngine aplica el resultado</text>
+        <text class="s" x="860" y="546" text-anchor="middle">guarda versiones, audita cada agente y mueve el estado</text>
+
+        <path class="e" d="M640 533 H190 V608" marker-end="url(#a3)"/>
+        <path class="e" d="M530 533 V608" marker-end="url(#a3)"/>
+        <path class="e-h" d="M900 561 V608" marker-end="url(#a3h)"/>
+
+        <rect class="b-det" x="40" y="610" width="300" height="72" rx="8"/>
+        <text class="t" x="190" y="634" text-anchor="middle">nivel 0 · automática</text>
+        <text class="tm" x="190" y="654" text-anchor="middle">READY_FOR_IMPLEMENTATION</text>
+        <text class="s" x="190" y="671" text-anchor="middle">sin hallazgos y confianza ≥ 0,85</text>
+        <rect class="b-plain" x="380" y="610" width="300" height="72" rx="8"/>
+        <text class="t" x="530" y="634" text-anchor="middle">nivel 1 · revisar después</text>
+        <text class="tm" x="530" y="654" text-anchor="middle">READY_FOR_IMPLEMENTATION</text>
+        <text class="s" x="530" y="671" text-anchor="middle">confianza 0,60–0,85 u observaciones menores</text>
+        <rect class="b-human" x="720" y="610" width="360" height="72" rx="8"/>
+        <text class="t" x="900" y="634" text-anchor="middle">nivel 2 · espera tu decisión</text>
+        <text class="tm" x="900" y="654" text-anchor="middle">WAITING_FOR_HUMAN</text>
+        <text class="s" x="900" y="671" text-anchor="middle">cambio crítico, pregunta bloqueante o confianza &lt; 0,60</text>
+      </svg>
+      </div>
+      <figcaption>Los agentes no conversan entre sí: cada uno lee y escribe claves del estado de la sesión (<code>output_key</code>, en morado y verde) y los agentes de flujo de ADK (<code>SequentialAgent</code>, <code>ParallelAgent</code>) fijan el orden. Solo cuatro agentes llaman a Gemini; el descubrimiento, la ingesta, la agregación y la política HITL son código. En la prueba real con SERVI_SINCHI, el generador propuso 11 historias y el flujo evaluó 10 en 14 minutos; las 10 quedaron en nivel 2 por preguntas bloqueantes.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===================================================== 4 · ESTADOS Y HITL -->
+  <section id="estados">
+    <h2><span class="n">4</span>Cómo avanza una historia y dónde decide una persona</h2>
+    <p>Cada historia tiene una máquina de estados persistida en <code>state/project_state.json</code>. Cualquier transición que no esté en <code>STORY_TRANSITIONS</code> se rechaza.</p>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1000 410" role="img" aria-label="Una historia pasa por DISCOVERED, ANALYZING, ARCHITECTURE_REVIEW y VALIDATING. Con nivel 0 o 1 queda en READY_FOR_IMPLEMENTATION; con nivel 2 queda en WAITING_FOR_HUMAN, de donde solo sale por una decisión humana: aprobar, rechazar, modificar (vuelve a ANALYZING) o pedir información.">
+        <defs>
+          <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="a4h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-h" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <!-- fila 1 -->
+        <rect class="b-plain" x="20" y="40" width="140" height="44" rx="22"/><text class="tm" x="90" y="66" text-anchor="middle">DISCOVERED</text>
+        <rect class="b-plain" x="200" y="40" width="130" height="44" rx="22"/><text class="tm" x="265" y="66" text-anchor="middle">ANALYZING</text>
+        <rect class="b-plain" x="370" y="40" width="190" height="44" rx="22"/><text class="tm" x="465" y="66" text-anchor="middle">ARCHITECTURE_REVIEW</text>
+        <rect class="b-plain" x="600" y="40" width="130" height="44" rx="22"/><text class="tm" x="665" y="66" text-anchor="middle">VALIDATING</text>
+        <line class="e" x1="160" y1="62" x2="198" y2="62" marker-end="url(#a4)"/>
+        <line class="e" x1="330" y1="62" x2="368" y2="62" marker-end="url(#a4)"/>
+        <line class="e" x1="560" y1="62" x2="598" y2="62" marker-end="url(#a4)"/>
+        <text class="s" x="349" y="30" text-anchor="middle">analista</text>
+        <text class="s" x="579" y="30" text-anchor="middle">agregador</text>
+        <text class="s" x="465" y="30" text-anchor="middle">arquitectura ‖ QA</text>
+
+        <!-- fila 2 -->
+        <rect class="b-plain" x="190" y="190" width="100" height="44" rx="22" stroke-dasharray="4 3"/><text class="tm" x="240" y="216" text-anchor="middle">ERROR</text>
+        <rect class="b-det" x="370" y="190" width="230" height="44" rx="22"/><text class="tm" x="485" y="216" text-anchor="middle">READY_FOR_IMPLEMENTATION</text>
+        <rect class="b-human" x="730" y="190" width="200" height="44" rx="22"/><text class="tm" x="830" y="216" text-anchor="middle">WAITING_FOR_HUMAN</text>
+
+        <line class="e" x1="640" y1="84" x2="540" y2="188" marker-end="url(#a4)"/>
+        <text class="lbl" x="582" y="146" text-anchor="end">nivel 0 · 1</text>
+        <line class="e" x1="700" y1="84" x2="800" y2="188" marker-end="url(#a4)"/>
+        <text class="lbl" x="772" y="140">nivel 2</text>
+
+        <line class="e-d" x1="215" y1="84" x2="215" y2="188" marker-end="url(#a4)"/>
+        <text class="lbl" x="207" y="140" text-anchor="end">falla</text>
+        <line class="e-d" x1="250" y1="188" x2="250" y2="86" marker-end="url(#a4)"/>
+        <text class="lbl" x="258" y="152">reintento</text>
+        <text class="lbl" x="258" y="166">(máx. 2)</text>
+
+        <!-- decisiones humanas desde WAITING -->
+        <path class="e-h" d="M750 190 V120 H295 V86" marker-end="url(#a4h)"/>
+        <text class="lbl-h" x="460" y="114" text-anchor="middle">MODIFIED · reanaliza con tu indicación (máx. 2)</text>
+        <path class="e-h" d="M872 190 C872 152, 912 152, 912 188" marker-end="url(#a4h)"/>
+        <text class="lbl-h" x="990" y="146" text-anchor="end">pedir información</text>
+
+        <!-- desde READY en el SPB -->
+        <path class="e-h" d="M400 190 V155 H318 V86" marker-end="url(#a4h)"/>
+        <text class="lbl-h" x="359" y="148" text-anchor="middle">refinar</text>
+
+        <!-- fila 3 -->
+        <rect class="b-plain" x="370" y="340" width="150" height="44" rx="22"/><text class="tm" x="445" y="366" text-anchor="middle">COMPLETED</text>
+        <rect class="b-plain" x="560" y="340" width="130" height="44" rx="22"/><text class="tm" x="625" y="366" text-anchor="middle">APPROVED</text>
+        <rect class="b-plain" x="760" y="340" width="130" height="44" rx="22"/><text class="tm" x="825" y="366" text-anchor="middle">REJECTED</text>
+
+        <line class="e" x1="445" y1="234" x2="445" y2="338" marker-end="url(#a4)"/>
+        <text class="lbl" x="453" y="270">implementada</text>
+        <line class="e-h" x1="775" y1="234" x2="655" y2="338" marker-end="url(#a4h)"/>
+        <text class="lbl-h" x="702" y="292" text-anchor="end">APPROVED</text>
+        <line class="e" x1="590" y1="340" x2="545" y2="236" marker-end="url(#a4)"/>
+        <text class="lbl" x="566" y="318" text-anchor="end">pasa a lista</text>
+        <line class="e-h" x1="835" y1="234" x2="835" y2="338" marker-end="url(#a4h)"/>
+        <text class="lbl-h" x="843" y="292">REJECTED</text>
+      </svg>
+      </div>
+      <figcaption>Las flechas naranjas solo las dispara una persona: desde el chat con <code>registrar_decision_humana</code> (y la guardia) o desde el SPB con <code>POST /api/projects/{id}/stories/{sid}/decision</code>. En el SPB también se puede aprobar o descartar una historia que ya está lista (nivel 0 o 1); <em>Aprobar épica</em> solo toca las que no esperan decisión crítica.</figcaption>
+    </figure>
+
+    <div class="levels">
+      <div class="level">
+        <h3>Nivel 0 · automática<small>AUTO_CONTINUE</small></h3>
+        <ul><li>Ninguna regla de los niveles 1 o 2 se cumple.</li><li>Los tres agentes coinciden y la confianza mínima es ≥ 0,85.</li></ul>
+      </div>
+      <div class="level">
+        <h3>Nivel 1 · revisar después<small>CONTINUE_WITH_REVIEW</small></h3>
+        <ul><li>Confianza entre 0,60 y 0,85.</li><li>Algunos criterios no verificables o un conflicto menor entre agentes.</li><li>Historia generada por IA (no pasa sin revisión humana).</li><li>Mejoras de redacción propuestas.</li></ul>
+      </div>
+      <div class="level l2">
+        <h3>Nivel 2 · espera tu decisión<small>STOP_FOR_HUMAN</small></h3>
+        <ul><li>Cambio crítico: seguridad, arquitectura, migración, borrado, API pública, irreversible, costos o impacto en otros proyectos.</li><li>Preguntas bloqueantes, riesgo crítico o conflicto alto entre agentes.</li><li>Mayoría de criterios no verificables, o sin criterios.</li><li>Un agente pide intervención, falta la salida de un agente o la confianza es &lt; 0,60.</li><li>Cambios propuestos a una historia que ya estaba aprobada.</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>Basado en el código del repositorio el 8 de octubre de 2026 (<code>src/hu_multiagent</code>, <code>adk_web.py</code>, <code>web/spb</code>) y en la ejecución real de SERVI_SINCHI de ese día. Umbrales y límites configurables en <code>.env</code>: <code>HU_CONFIDENCE_AUTO</code>, <code>HU_CONFIDENCE_REVIEW</code>, <code>HU_MAX_HISTORIAS_POR_EJECUCION</code>, <code>HU_MAX_REANALISIS</code>.</footer>
+</div>
+
+</body></html>

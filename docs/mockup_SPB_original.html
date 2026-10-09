@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Product Backlog · WOW Mockup</title>
+<style>
+:root{
+  --bg:#0a0f1f;
+  --bg2:#0e1428;
+  --card:#121a31cc;
+  --card-solid:#121a31;
+  --line:#24304d;
+  --text:#f7f9ff;
+  --muted:#93a0bc;
+  --muted2:#6f7c98;
+  --blue:#6ea8ff;
+  --blue2:#4b73ff;
+  --violet:#9b7cff;
+  --cyan:#60e8ff;
+  --green:#64e1b4;
+  --amber:#ffd27a;
+  --red:#ff8397;
+  --shadow:0 30px 80px rgba(0,0,0,.38);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:
+radial-gradient(circle at 10% 0%, rgba(75,115,255,.20), transparent 28%),
+radial-gradient(circle at 90% 10%, rgba(155,124,255,.18), transparent 26%),
+linear-gradient(180deg,#0a0f1f,#0b1123 60%,#0c1225);
+color:var(--text)}
+body{overflow-x:hidden}
+button,input{font:inherit}
+input[type="file"]{display:none}
+button{cursor:pointer}
+
+.shell{max-width:1380px;margin:auto;padding:18px}
+.app{
+  min-height:calc(100vh - 36px);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:28px;
+  background:linear-gradient(180deg,rgba(17,24,46,.88),rgba(9,15,31,.94));
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:86px 1fr;
+  backdrop-filter:blur(20px);
+}
+.rail{
+  border-right:1px solid rgba(255,255,255,.06);
+  padding:24px 12px 18px;
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  background:rgba(8,13,28,.54);
+}
+.brand{
+  width:46px;height:46px;border-radius:16px;
+  display:grid;place-items:center;
+  font-weight:900;font-size:12px;
+  background:linear-gradient(135deg,var(--blue2),var(--violet));
+  box-shadow:0 12px 32px rgba(75,115,255,.28);
+  margin-bottom:16px
+}
+.railbtn{
+  width:48px;height:48px;border:0;border-radius:15px;background:transparent;color:#73809d;
+  display:grid;place-items:center;font-weight:900;font-size:12px;position:relative;
+  transition:.22s
+}
+.railbtn:hover{background:#ffffff08;color:#d7deef}
+.railbtn.active{
+  background:linear-gradient(180deg,#1c2748,#16213d);
+  color:#fff;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 10px 30px rgba(0,0,0,.22)
+}
+.railbtn.active:after{
+  content:"";position:absolute;left:-12px;width:3px;height:24px;border-radius:99px;
+  background:linear-gradient(var(--cyan),var(--violet))
+}
+.rail-spacer{flex:1}
+.userdot{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#1b2747;color:#b8c5e3;font-size:11px;font-weight:900}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.top{
+  height:72px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 26px;border-bottom:1px solid rgba(255,255,255,.06)
+}
+.project-title{display:flex;align-items:center;gap:10px}
+.project-title b{font-size:14px}
+.badge{
+  font-size:9px;padding:5px 7px;border-radius:999px;background:#ffffff08;color:#8290ae;
+  border:1px solid rgba(255,255,255,.06)
+}
+.top-actions{display:flex;gap:8px;align-items:center}
+.ghost,.solid{
+  border-radius:11px;padding:9px 12px;font-size:10px;font-weight:850
+}
+.ghost{border:1px solid rgba(255,255,255,.08);background:#ffffff05;color:#c6d0e6}
+.solid{border:0;background:linear-gradient(135deg,var(--blue2),#6f63ff);color:white;box-shadow:0 10px 24px rgba(75,115,255,.22)}
+
+.workspace{flex:1;padding:28px;position:relative}
+.page{display:none;animation:fade .26s ease}
+.page.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#8ea7df
+}
+.eyebrow:before{content:"";width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--violet));box-shadow:0 0 16px rgba(96,232,255,.55)}
+.hero{max-width:860px;margin:18px auto 28px;text-align:center}
+.hero h1{font-size:clamp(40px,6vw,78px);line-height:.98;letter-spacing:-3px;margin:12px 0 14px}
+.hero h1 span{background:linear-gradient(90deg,#fff,#a8c5ff 46%,#c9adff);-webkit-background-clip:text;color:transparent}
+.hero p{max-width:720px;margin:auto;color:#98a6c3;font-size:15px;line-height:1.65}
+.journey{
+  max-width:980px;margin:0 auto 24px;
+  display:grid;grid-template-columns:repeat(5,1fr);gap:8px
+}
+.jstep{
+  padding:11px;border-radius:13px;border:1px solid rgba(255,255,255,.06);
+  background:#ffffff04;text-align:left
+}
+.jstep small{display:block;font-size:8px;color:#65728e;text-transform:uppercase;font-weight:900;letter-spacing:.45px}
+.jstep b{display:block;font-size:10px;margin-top:3px;color:#aeb9cf}
+.jstep.active{background:linear-gradient(180deg,#1b2749,#15203b);border-color:#3e527f}
+.jstep.active b{color:#fff}.jstep.done{background:#10241f;border-color:#224f41}.jstep.done b{color:#8ce8c5}
+
+.ingest-grid{
+  max-width:1120px;margin:auto;display:grid;grid-template-columns:1fr;gap:16px
+}
+.glass{
+  background:linear-gradient(180deg,rgba(24,34,63,.90),rgba(18,26,49,.88));
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:22px;box-shadow:0 20px 50px rgba(0,0,0,.18)
+}
+.upload{padding:18px}
+.panel-head{display:flex;justify-content:space-between;gap:16px;align-items:start;margin-bottom:14px}
+.panel-head h3{margin:0;font-size:14px}
+.panel-head p{margin:4px 0 0;color:#7d8aa7;font-size:10px;line-height:1.45}
+.drop{
+  min-height:270px;border:1px dashed #3b4d76;border-radius:18px;
+  display:grid;place-items:center;text-align:center;
+  background:
+  radial-gradient(circle at 50% 0%,rgba(75,115,255,.10),transparent 36%),
+  linear-gradient(180deg,#10182f,#0f172c);
+  position:relative;overflow:hidden
+}
+.drop:before{
+  content:"";position:absolute;inset:auto -30% -65% -30%;height:200px;
+  background:radial-gradient(ellipse,rgba(155,124,255,.18),transparent 65%)
+}
+.orb{
+  width:72px;height:72px;border-radius:22px;margin:auto;
+  display:grid;place-items:center;
+  background:linear-gradient(145deg,#26375f,#172343);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),0 16px 40px rgba(0,0,0,.24)
+}
+.orb svg{width:30px;height:30px}
+.drop h2{font-size:20px;margin:14px 0 5px}
+.drop p{font-size:10.5px;color:#7785a1;margin:0 0 15px}
+.filetypes{display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+.filetypes span{font-size:8.5px;padding:5px 7px;border-radius:999px;background:#ffffff06;color:#7e8da9;border:1px solid rgba(255,255,255,.05)}
+.files{padding:16px}
+.file{
+  display:grid;grid-template-columns:38px 1fr auto auto;gap:10px;align-items:center;
+  padding:11px 0;border-bottom:1px solid rgba(255,255,255,.05)
+}
+.file:last-child{border-bottom:0}
+.ficon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:9px;font-weight:900}
+.ficon.pdf{background:#321d2a;color:#ff97a8}.ficon.aud{background:#182746;color:#8fb2ff}
+.file b{display:block;font-size:10.5px}.file span{font-size:8.8px;color:#6f7c98}
+.ready{font-size:8.5px!important;color:#68dbae!important;background:#10291f;border:1px solid #214a3d;padding:4px 6px;border-radius:999px}
+.remove-file{width:30px;height:30px;border-radius:9px;border:1px solid #552738;background:#301a24;color:#ff8ca0;font-size:14px;display:grid;place-items:center}.remove-file:hover{background:#45202d;color:#fff}.empty-files{padding:14px 0 2px;color:#6f7c98;font-size:9px;text-align:center}
+
+.side-card{padding:18px}
+.side-card h3{font-size:13px;margin:0 0 12px}
+.microflow{display:grid;gap:8px}
+.micro{
+  display:grid;grid-template-columns:28px 1fr;gap:9px;align-items:start;
+  padding:10px;border-radius:12px;background:#ffffff03;border:1px solid rgba(255,255,255,.05)
+}
+.micro i{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:#172543;color:#8eb6ff;font-style:normal;font-size:9px;font-weight:900}
+.micro b{display:block;font-size:10.2px;margin-bottom:2px}.micro span{font-size:8.8px;color:#6f7d99;line-height:1.35}
+.privacy{margin-top:12px;padding:10px;border-radius:11px;background:#0e201c;border:1px solid #204338;color:#79d7b4;font-size:8.8px;line-height:1.4}
+
+.process-wrap{max-width:1060px;margin:auto}
+.big-status{
+  padding:26px;text-align:center;margin-bottom:15px;position:relative;overflow:hidden
+}
+.big-status:after{
+  content:"";position:absolute;inset:auto 10% -90px 10%;height:150px;background:radial-gradient(ellipse,rgba(75,115,255,.18),transparent 65%)
+}
+.loader{
+  width:76px;height:76px;border-radius:50%;margin:4px auto 16px;
+  border:2px solid #253253;border-top-color:var(--cyan);border-right-color:var(--violet);
+  animation:spin 1.3s linear infinite
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.big-status h2{font-size:24px;margin:0 0 6px}
+.big-status p{font-size:10.5px;color:#7f8daa;margin:0}
+.stage-list{display:grid;gap:8px}
+.stage{
+  padding:13px 14px;display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:10px;
+  background:#ffffff03;border:1px solid rgba(255,255,255,.05);border-radius:14px
+}
+.stage .n{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:#172543;color:#8eb6ff;font-weight:900;font-size:10px}
+.stage.done .n{background:#102a22;color:#69ddb2}
+.stage b{display:block;font-size:10.5px}.stage span{font-size:8.8px;color:#6f7c98}
+.stage .stat{font-size:8.5px;font-weight:900;padding:5px 7px;border-radius:999px;background:#13213d;color:#86a8ff}
+.stage.done .stat{background:#10291f;color:#6ee0b6}
+
+.review{
+  max-width:1220px;margin:auto;display:grid;grid-template-columns:270px 1fr;gap:14px
+}
+.epics{padding:14px}
+.epic{
+  width:100%;text-align:left;border:1px solid transparent;background:transparent;color:#9eabc6;
+  border-radius:12px;padding:11px;margin-bottom:6px
+}
+.epic:hover{background:#ffffff04}
+.epic.active{background:linear-gradient(180deg,#1b2748,#15213d);border-color:#35476f;color:#fff}
+.epic b{display:block;font-size:10.5px}.epic span{font-size:8.5px;color:#64718c}
+.storyarea{padding:16px}
+.storyhead{display:flex;justify-content:space-between;align-items:end;gap:14px;margin-bottom:12px}
+.storyhead h2{font-size:20px;margin:0}
+.storyhead p{font-size:9.5px;color:#71809c;margin:4px 0 0}
+.story{
+  border:1px solid rgba(255,255,255,.07);border-radius:17px;padding:14px;margin-bottom:10px;background:linear-gradient(180deg,#141d36,#11192f)
+}
+.storytop{display:flex;justify-content:space-between;gap:12px}
+.story h4{font-size:11.5px;margin:0 0 6px}
+.story p{font-size:10.3px;line-height:1.55;color:#9aa7c1;margin:0}
+.kind{font-size:8px;font-weight:900;padding:5px 7px;border-radius:999px;background:#261f43;color:#b5a0ff;white-space:nowrap}
+.kind.trad{background:#162742;color:#8fb7ff}
+.source{
+  margin-top:10px;padding:9px;border-radius:10px;background:#0d1428;border:1px solid #202c48;
+  color:#75829d;font-size:8.8px;line-height:1.45
+}
+.source b{color:#a8b5cf}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.actions button{border-radius:9px;padding:7px 9px;font-size:8.7px;font-weight:900}
+.ok{background:#10291f;color:#6be0b5;border:1px solid #214a3d}
+.ref{background:#172543;color:#8eb6ff;border:1px solid #2a3f69}
+.no{background:#301a24;color:#ff8ca0;border:1px solid #552738}
+.refinebox{display:none;grid-template-columns:1fr auto;gap:7px;margin-top:10px}
+.refinebox.show{display:grid}
+.refinebox input{border:1px solid #2a385a;background:#0e162a;color:#dbe4f8;border-radius:10px;padding:9px;font-size:9.5px}
+
+.backlog-wrap{max-width:1180px;margin:auto}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.statcard{padding:14px}
+.statcard small{display:block;font-size:8.5px;color:#697690;text-transform:uppercase;font-weight:900;letter-spacing:.45px}
+.statcard b{display:block;font-size:26px;margin-top:3px}
+.final-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}
+.list{padding:14px}
+.row{
+  display:grid;grid-template-columns:62px 1fr 80px 75px;gap:8px;align-items:center;
+  padding:11px;border-bottom:1px solid rgba(255,255,255,.05)
+}
+.row:last-child{border-bottom:0}
+.row b{font-size:10px}.row span{font-size:8.7px;color:#71809c}
+.chip{font-size:8px!important;font-weight:900;padding:5px 6px;border-radius:999px;background:#172543;color:#8eb6ff;text-align:center}
+.chip.ai{background:#261f43;color:#b59fff}.chip.high{background:#2a2211;color:#f3c766}
+.summary{padding:14px}
+.summary h3{font-size:13px;margin:0 0 12px}
+.epicbar{margin-bottom:12px}
+.epicbar b{display:flex;justify-content:space-between;font-size:9.5px}
+.epicbar b span{color:#6d7a95;font-weight:700}
+.bar{height:7px;border-radius:999px;background:#11182c;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--blue2),var(--cyan))}
+
+.footer-note{
+  text-align:center;color:#5c6985;font-size:8.5px;margin-top:14px
+}
+.toast{
+  position:fixed;right:28px;bottom:28px;background:#111a31;border:1px solid #2a395b;color:#fff;
+  padding:10px 12px;border-radius:11px;font-size:9px;box-shadow:0 16px 40px rgba(0,0,0,.34);
+  opacity:0;transform:translateY(10px);transition:.2s;z-index:100
+}
+.toast.show{opacity:1;transform:none}
+
+@media(max-width:900px){
+  .app{grid-template-columns:1fr}
+  .rail{display:none}
+  .ingest-grid,.review,.final-grid{grid-template-columns:1fr}
+  .stats{grid-template-columns:1fr 1fr}
+}
+@media(max-width:620px){
+  .shell{padding:0}.app{border-radius:0;min-height:100vh}
+  .workspace{padding:20px 14px}.top{padding:0 14px}
+  .hero h1{font-size:46px}
+  .journey{grid-template-columns:1fr 1fr}
+  .row{grid-template-columns:55px 1fr}
+  .row .mobilehide{display:none}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="app">
+    <aside class="rail">
+      <button class="railbtn active" onclick="go(0)" title="Ingesta">01</button>
+      <button class="railbtn" onclick="go(1)" title="Procesamiento">02</button>
+      <button class="railbtn" onclick="go(2)" title="Refinamiento">03</button>
+      <button class="railbtn" onclick="go(3)" title="Backlog final">04</button>
+      <div class="rail-spacer"></div>
+    </aside>
+
+    <main class="main">
+      <header class="top">
+        <div class="project-title">
+          <b>Smart Product Backlog</b>
+          <span class="badge">Proyecto demo</span>
+        </div>
+        <div class="top-actions">
+          <button class="ghost" onclick="toast('Cambios guardados')">Guardar</button>
+          <button class="solid" onclick="go(Math.min(current+1,3))">Continuar</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <!-- PAGE 0 -->
+        <div class="page active" id="p0">
+          <div class="hero">
+            <div class="eyebrow">Paso 1 · Ingesta</div>
+            <h1><span>Trae la conversación.</span><br>Nosotros encontramos el producto.</h1>
+            
+          </div>
+
+          <div class="journey">
+            <div class="jstep active"><small>01</small><b>Insumos</b></div>
+            <div class="jstep"><small>02</small><b>Comprensión</b></div>
+            <div class="jstep"><small>03</small><b>Refinamiento</b></div>
+            <div class="jstep"><small>04</small><b>Validación</b></div>
+            <div class="jstep"><small>05</small><b>Backlog</b></div>
+          </div>
+
+          <div class="ingest-grid">
+            <div class="glass upload">
+              <div class="panel-head">
+                <div><h3>Fuentes del proyecto</h3></div>
+                <button class="ghost" onclick="openFilePicker()">+ Agregar</button>
+              </div>
+
+              <div class="drop">
+                <div style="position:relative;z-index:2">
+                  <div class="orb">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#bcd2ff" stroke-width="1.6">
+                      <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5"/>
+                      <path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>
+                    </svg>
+                  </div>
+                  <h2>Suelta aquí tu contexto</h2>
+                  <button class="solid" onclick="openFilePicker()">Seleccionar archivos</button>
+                  <input id="fileInput" type="file" multiple accept=".pdf,.doc,.docx,.txt,.mp3,.wav,.m4a" onchange="handleFiles(this.files)">
+                </div>
+              </div>
+
+              <div class="files" id="files">
+                <div class="empty-files">Aún no has seleccionado archivos.</div>
+              </div>
+              <button class="solid" style="width:100%;margin-top:12px" onclick="go(1)">Analizar proyecto →</button>
+            </div>
+
+
+          </div>
+        </div>
+
+        <!-- PAGE 1 -->
+        <div class="page" id="p1">
+          <div class="hero" style="margin-top:8px">
+            <div class="eyebrow">Paso 2 · Comprensión</div>
+            <h1 style="font-size:52px"><span>Estamos leyendo entre líneas.</span></h1>
+            
+          </div>
+
+          <div class="journey">
+            <div class="jstep done"><small>01</small><b>Insumos</b></div>
+            <div class="jstep active"><small>02</small><b>Comprensión</b></div>
+            <div class="jstep"><small>03</small><b>Refinamiento</b></div>
+            <div class="jstep"><small>04</small><b>Validación</b></div>
+            <div class="jstep"><small>05</small><b>Backlog</b></div>
+          </div>
+
+          <div class="process-wrap">
+            <div class="glass big-status">
+              <div class="loader"></div>
+              <h2>Construyendo la primera propuesta</h2>
+              
+            </div>
+
+            <div class="stage-list">
+              <div class="stage done"><div class="n">✓</div><div><b>Fuentes recibidas</b><span>2 archivos vinculados al proyecto</span></div><div class="stat">Completo</div></div>
+              <div class="stage done"><div class="n">✓</div><div><b>Contenido estructurado</b><span>Texto del PDF y transcripción del audio disponibles</span></div><div class="stat">Completo</div></div>
+              <div class="stage done"><div class="n">✓</div><div><b>Necesidades detectadas</b><span>Stakeholders, objetivos, restricciones y funcionalidades identificados</span></div><div class="stat">Completo</div></div>
+              <div class="stage"><div class="n">AI</div><div><b>Primera propuesta de backlog</b><span>Generando épicas, historias y criterios de aceptación</span></div><div class="stat">En curso</div></div>
+            </div>
+
+            <div style="display:flex;justify-content:center;margin-top:15px">
+              <button class="solid" onclick="go(2)">Ver propuesta →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 2 -->
+        <div class="page" id="p2">
+          <div class="hero" style="margin:8px auto 18px">
+            <div class="eyebrow">Paso 3 · Refinamiento</div>
+            <h1 style="font-size:50px"><span>La IA propone. Tú decides.</span></h1>
+            
+          </div>
+
+          <div class="journey">
+            <div class="jstep done"><small>01</small><b>Insumos</b></div>
+            <div class="jstep done"><small>02</small><b>Comprensión</b></div>
+            <div class="jstep active"><small>03</small><b>Refinamiento</b></div>
+            <div class="jstep"><small>04</small><b>Validación</b></div>
+            <div class="jstep"><small>05</small><b>Backlog</b></div>
+          </div>
+
+          <div class="review">
+            <aside class="glass epics">
+              <div class="panel-head"><div><h3>Épicas</h3><p>4 detectadas</p></div></div>
+              <button class="epic active"><b>Monitoreo automatizado</b><span>4 historias</span></button>
+              <button class="epic"><b>Clasificación de coberturas</b><span>3 historias</span></button>
+              <button class="epic"><b>Validación de resultados</b><span>2 historias</span></button>
+              <button class="epic"><b>Indicadores y tablero</b><span>3 historias</span></button>
+            </aside>
+
+            <div class="glass storyarea">
+              <div class="storyhead">
+                <div><h2>Monitoreo automatizado</h2><p>4 historias propuestas · 3 pendientes de revisión</p></div>
+                <button class="ghost" onclick="toast('Todas las historias visibles fueron aprobadas')">Aprobar épica</button>
+              </div>
+
+              <div class="story">
+                <div class="storytop">
+                  <div><h4>HU-01 · Consultar disponibilidad de nuevas imágenes</h4>
+                  <p>Como analista ambiental, quiero que el sistema consulte automáticamente si existen nuevas imágenes satelitales para iniciar el procesamiento cuando haya información disponible.</p></div>
+                  <span class="kind">HU-IA</span>
+                </div>
+                <div class="source"><b>Evidencia</b> · “...el polígono de consulta tiene un request y ese request dice: ¿ya hay imagen? y si hay imagen, dispara el proceso...”</div>
+                <div class="actions">
+                  <button class="ok" onclick="approve(this)">✓ Aprobar</button>
+                  <button class="ref" onclick="toggleRefine(this)">↻ Refinar</button>
+                  <button class="no" onclick="discard(this)">Descartar</button>
+                </div>
+                <div class="refinebox"><input placeholder="Ej. agrega que también valide nubosidad antes de iniciar"><button class="solid" onclick="applyRefine(this)">Enviar</button></div>
+              </div>
+
+              <div class="story">
+                <div class="storytop">
+                  <div><h4>HU-02 · Configurar umbral de nubosidad</h4>
+                  <p>Como especialista SIG, quiero definir el porcentaje máximo de nubosidad permitido para evitar procesar imágenes que no sean útiles.</p></div>
+                  <span class="kind trad">HU-Tradicional</span>
+                </div>
+                <div class="source"><b>Evidencia</b> · “...podemos decidir con qué porcentaje de nubosidad aceptamos imágenes...”</div>
+                <div class="actions">
+                  <button class="ok" onclick="approve(this)">✓ Aprobar</button>
+                  <button class="ref" onclick="toggleRefine(this)">↻ Refinar</button>
+                  <button class="no" onclick="discard(this)">Descartar</button>
+                </div>
+                <div class="refinebox"><input placeholder="Describe qué quieres ajustar"><button class="solid" onclick="applyRefine(this)">Enviar</button></div>
+              </div>
+
+              <div class="story">
+                <div class="storytop">
+                  <div><h4>HU-03 · Generar una mirada consolidada de la Amazonía</h4>
+                  <p>Como responsable de monitoreo, quiero obtener cortes periódicos consolidados de la Amazonía para comparar cambios a través del tiempo.</p></div>
+                  <span class="kind">HU-IA</span>
+                </div>
+                <div class="source"><b>Evidencia</b> · “...ponernos de acuerdo cómo es el mecanismo para generar una mirada de toda la Amazonía, si es cada 15 días, si es cada mes...”</div>
+                <div class="actions">
+                  <button class="ok" onclick="approve(this)">✓ Aprobar</button>
+                  <button class="ref" onclick="toggleRefine(this)">↻ Refinar</button>
+                  <button class="no" onclick="discard(this)">Descartar</button>
+                </div>
+                <div class="refinebox"><input placeholder="Describe qué quieres ajustar"><button class="solid" onclick="applyRefine(this)">Enviar</button></div>
+              </div>
+
+              <div style="display:flex;justify-content:flex-end;margin-top:10px">
+                <button class="solid" onclick="go(3)">Cerrar revisión y ver backlog →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 3 -->
+        <div class="page" id="p3">
+          <div class="hero" style="margin:8px auto 18px">
+            <div class="eyebrow">Paso 5 · Backlog final</div>
+            <h1 style="font-size:52px"><span>Del contexto a decisiones accionables.</span></h1>
+            
+          </div>
+
+          <div class="journey">
+            <div class="jstep done"><small>01</small><b>Insumos</b></div>
+            <div class="jstep done"><small>02</small><b>Comprensión</b></div>
+            <div class="jstep done"><small>03</small><b>Refinamiento</b></div>
+            <div class="jstep done"><small>04</small><b>Validación</b></div>
+            <div class="jstep active"><small>05</small><b>Backlog</b></div>
+          </div>
+
+          <div class="backlog-wrap">
+            <div class="stats">
+              <div class="glass statcard"><small>Épicas</small><b>4</b></div>
+              <div class="glass statcard"><small>Historias aprobadas</small><b>10</b></div>
+              <div class="glass statcard"><small>HU-IA</small><b>6</b></div>
+              <div class="glass statcard"><small>HU tradicionales</small><b>4</b></div>
+            </div>
+
+            <div class="final-grid">
+              <div class="glass list">
+                <div class="panel-head">
+                  <div><h3>Smart Product Backlog</h3><p>Vista lista para priorizar, estimar y exportar</p></div>
+                  <div style="display:flex;gap:6px"><button class="ghost">CSV</button><button class="solid">JSON</button></div>
+                </div>
+
+                <div class="row"><b>HU-01</b><span>Consultar disponibilidad de nuevas imágenes</span><span class="chip ai mobilehide">HU-IA</span><span class="chip high mobilehide">Alta</span></div>
+                <div class="row"><b>HU-02</b><span>Configurar umbral de nubosidad</span><span class="chip mobilehide">Tradicional</span><span class="chip high mobilehide">Alta</span></div>
+                <div class="row"><b>HU-03</b><span>Generar mirada consolidada de la Amazonía</span><span class="chip ai mobilehide">HU-IA</span><span class="chip mobilehide">Media</span></div>
+                <div class="row"><b>HU-04</b><span>Comparar resultados entre periodos</span><span class="chip ai mobilehide">HU-IA</span><span class="chip mobilehide">Media</span></div>
+                <div class="row"><b>HU-05</b><span>Consultar indicadores en tablero</span><span class="chip mobilehide">Tradicional</span><span class="chip mobilehide">Media</span></div>
+              </div>
+
+              <div class="glass summary">
+                <h3>Avance por épica</h3>
+                <div class="epicbar"><b>Monitoreo automatizado <span>4/4</span></b><div class="bar"><i style="width:100%"></i></div></div>
+                <div class="epicbar"><b>Clasificación de coberturas <span>3/3</span></b><div class="bar"><i style="width:100%"></i></div></div>
+                <div class="epicbar"><b>Validación de resultados <span>2/2</span></b><div class="bar"><i style="width:100%"></i></div></div>
+                <div class="epicbar"><b>Indicadores y tablero <span>1/3</span></b><div class="bar"><i style="width:34%"></i></div></div>
+
+                <div class="privacy" style="margin-top:18px">
+                  Cada HU conserva la fuente original y el historial de revisión humana.
+                </div>
+              </div>
+            </div>
+
+            
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let current=0;
+function go(n){
+  current=n;
+  document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('active',i===n));
+  document.querySelectorAll('.railbtn').forEach((b,i)=>b.classList.toggle('active',i===n));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(window._t);window._t=setTimeout(()=>t.classList.remove('show'),1800);
+}
+let selectedFiles=[];
+function openFilePicker(){
+  document.getElementById('fileInput').click();
+}
+function formatSize(bytes){
+  if(bytes===0) return '0 KB';
+  const units=['B','KB','MB','GB'];
+  const i=Math.min(Math.floor(Math.log(bytes)/Math.log(1024)),units.length-1);
+  const value=bytes/Math.pow(1024,i);
+  return `${value.toFixed(i===0?0:1)} ${units[i]}`;
+}
+function fileKind(name){
+  const ext=(name.split('.').pop()||'').toLowerCase();
+  if(['mp3','wav','m4a'].includes(ext)) return {cls:'aud',label:'AUD',type:'Audio'};
+  if(ext==='pdf') return {cls:'pdf',label:'PDF',type:'Documento'};
+  return {cls:'pdf',label:(ext.toUpperCase().slice(0,4)||'FILE'),type:'Documento'};
+}
+function handleFiles(fileList){
+  const incoming=Array.from(fileList);
+  incoming.forEach(file=>{
+    const duplicate=selectedFiles.some(f=>f.name===file.name && f.size===file.size && f.lastModified===file.lastModified);
+    if(!duplicate) selectedFiles.push(file);
+  });
+  renderFiles();
+  document.getElementById('fileInput').value='';
+  if(incoming.length) toast(`${incoming.length} archivo${incoming.length===1?'':'s'} agregado${incoming.length===1?'':'s'}`);
+}
+function removeFile(index){
+  selectedFiles.splice(index,1);
+  renderFiles();
+  toast('Archivo eliminado');
+}
+function escapeHtml(text){
+  const div=document.createElement('div');
+  div.textContent=text;
+  return div.innerHTML;
+}
+function renderFiles(){
+  const container=document.getElementById('files');
+  if(!selectedFiles.length){
+    container.innerHTML='<div class="empty-files">Aún no has seleccionado archivos.</div>';
+    return;
+  }
+  container.innerHTML=selectedFiles.map((file,index)=>{
+    const k=fileKind(file.name);
+    const safeName=escapeHtml(file.name);
+    return `<div class="file"><div class="ficon ${k.cls}">${k.label}</div><div><b>${safeName}</b><span>${formatSize(file.size)} · ${k.type}</span></div><span class="ready">Listo</span><button class="remove-file" type="button" title="Eliminar archivo" onclick="removeFile(${index})">×</button></div>`;
+  }).join('');
+}
+const dropZone=document.querySelector('.drop');
+['dragenter','dragover'].forEach(evt=>dropZone.addEventListener(evt,e=>{e.preventDefault();dropZone.style.borderColor='#6ea8ff';}));
+['dragleave','drop'].forEach(evt=>dropZone.addEventListener(evt,e=>{e.preventDefault();dropZone.style.borderColor='#3b4d76';}));
+dropZone.addEventListener('drop',e=>handleFiles(e.dataTransfer.files));
+function approve(btn){
+  btn.textContent='✓ Aprobada';btn.disabled=true;btn.style.opacity=.62;toast('Historia aprobada');
+}
+function discard(btn){
+  btn.closest('.story').style.opacity=.38;toast('Historia descartada');
+}
+function toggleRefine(btn){
+  btn.closest('.story').querySelector('.refinebox').classList.toggle('show');
+}
+function applyRefine(btn){
+  btn.closest('.story').querySelector('.refinebox').classList.remove('show');
+  toast('Refinamiento enviado');
+}
+</script>
+</body>
+</html>
