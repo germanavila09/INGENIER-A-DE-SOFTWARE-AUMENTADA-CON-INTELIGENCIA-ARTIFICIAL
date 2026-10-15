@@ -115,8 +115,15 @@ def test_flujo_completo_desde_la_interfaz(entorno):
 
     b = client.get("/api/projects/SERVI_SINCHI/backlog").json()
     h = {x["id"]: x for x in b["historias"]}
-    assert h["HU-IA-001"]["tipo"] == "HU-IA" and "modelo" in h["HU-IA-001"]["tipo_motivo"]
-    assert h["HU-IA-002"]["tipo"] == "HU-Tradicional"
+    # el tipo lo decide estimation_agent; los puntos, el rango y el spike se calculan en código
+    assert h["HU-IA-001"]["tipo"] == "HU-IA" and "clasificador" in h["HU-IA-001"]["tipo_motivo"]
+    assert h["HU-IA-001"]["tipo_origen"] == "ia"
+    est = h["HU-IA-001"]["estimacion"]
+    assert (est["puntos"], est["rango"], est["metodo"]) == (5, {"min": 3, "max": 8}, "ia_factores_v1")
+    assert est["spike"] == {"required": True, "points": 2} and est["origen"] == "ia"
+    assert "SPIKE_REQUIRED" in {m["codigo"] for m in h["HU-IA-001"]["hitl"]["motivos"]}
+    assert h["HU-IA-002"]["tipo"] == "HU-Tradicional" and h["HU-IA-002"]["estimacion"]["puntos"] == 3
+    assert b["stats"]["puntos"] == 8 and b["stats"]["spikes"] == 1
     assert (h["HU-IA-001"]["prioridad"], h["HU-IA-002"]["prioridad"]) == ("Alta", "Media")
     assert h["HU-IA-001"]["prioridad_origen"] == "ia" and h["HU-IA-001"]["evidencia"]
     assert {x["estado_ui"] for x in h.values()} == {"revisar"}   # generadas: nunca automáticas

@@ -60,3 +60,7 @@ class AggregatedReview(BaseModel):
     agent_hitl_requests: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     missing_agents: list[str] = Field(default_factory=list)
+    # Estimación calculada en código (services/estimation.py) a partir de los factores del estimation_agent.
+    # Es informativa: no baja la confianza agregada ni detiene el flujo si falta.
+    estimation: dict[str, Any] | None = None
+    estimation_error: str = ""

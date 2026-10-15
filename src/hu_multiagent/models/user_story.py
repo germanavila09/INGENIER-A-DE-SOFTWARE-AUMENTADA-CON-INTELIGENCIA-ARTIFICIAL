@@ -192,6 +192,32 @@ class QATestOutput(BaseModel):
     confidence: float
 
 
+# --------------------------------------------------------------- estimation
+class StoryType(str, Enum):
+    HU_IA = "HU_IA"
+    HU_TRADICIONAL = "HU_TRADICIONAL"
+
+
+class EstimationOutput(BaseModel):
+    """Salida de ESTIMATION_AGENT. Un campo por factor porque Gemini no admite diccionarios libres;
+    solo se usan los del tipo elegido. Los puntos los calcula services/estimation.py."""
+
+    story_id: str
+    story_type: StoryType = Field(description="HU_IA si la historia necesita construir, entrenar o ajustar un "
+                                              "componente de IA/ML; HU_TRADICIONAL en otro caso.")
+    type_justification: str = Field(description="Por qué es HU_IA o HU_TRADICIONAL, en una frase.")
+    datos: int | None = Field(None, description="HU_IA: disponibilidad y calidad de datos, 1-5")
+    modelo: int | None = Field(None, description="HU_IA: complejidad del modelo o del prompt, 1-5")
+    evaluacion: int | None = Field(None, description="HU_IA: necesidad de evaluación con métricas, 1-5")
+    riesgo: int | None = Field(None, description="HU_IA: riesgo de no alcanzar el resultado esperado, 1-5")
+    integracion: int | None = Field(None, description="HU_IA: trabajo tradicional alrededor del modelo, 1-5")
+    complejidad: int | None = Field(None, description="HU_TRADICIONAL: complejidad de reglas y flujos, 1-5")
+    esfuerzo: int | None = Field(None, description="HU_TRADICIONAL: esfuerzo de construcción e integración, 1-5")
+    incertidumbre: int | None = Field(None, description="HU_TRADICIONAL: qué tan poco claro está el requisito, 1-5")
+    rationale: str = Field(description="Una o dos frases que justifican los factores más altos.")
+    confidence: float = Field(description="0-1: certeza de la puntuación con la información disponible.")
+
+
 # -------------------------------------------------------- story_generator
 class GeneratedStory(BaseModel):
     story_id: str = Field(description="HU-IA-001, HU-IA-002…")

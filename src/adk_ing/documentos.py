@@ -18,7 +18,7 @@ TAM_PARTE = 4000          # caracteres por sección en formatos sin páginas
 MAX_FILAS_HOJA = 2000     # filas leídas por hoja de Excel / CSV
 
 TEXTO = {".txt", ".md", ".json", ".py", ".sql", ".xml", ".yaml", ".yml", ".log", ".tsv"}
-EXTENSIONES = {".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".csv", ".html", ".htm"} | TEXTO
+EXTENSIONES = {".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".csv", ".html", ".htm", ".bpmn"} | TEXTO
 
 # Formatos que Gemini puede leer directamente (sirve para PDF escaneados e imágenes).
 MIME_GEMINI = {
@@ -84,6 +84,8 @@ def extraer(nombre: str, data: bytes) -> Documento:
         doc = _csv(nombre, data, "\t" if ext == ".tsv" else None)
     elif ext in (".html", ".htm"):
         doc = _partes(nombre, "html", _html_a_texto(_decodificar(data)))
+    elif ext == ".bpmn":
+        doc = _bpmn(nombre, data)
     elif ext in TEXTO:
         doc = _partes(nombre, ext.lstrip("."), _decodificar(data))
     else:
@@ -197,6 +199,63 @@ def _csv(nombre: str, data: bytes, delimitador: str | None) -> Documento:
     if texto.count("\n") > MAX_FILAS_HOJA:
         doc.aviso = f"Solo se leyeron las primeras {MAX_FILAS_HOJA} filas."
     return doc
+
+
+def _bpmn(nombre: str, data: bytes) -> Documento:
+    """Modelo de proceso BPMN 2.0 → resumen legible: procesos, carriles, actividades (con su
+    documentación), decisiones, eventos y flujo.
+
+    Adaptado del lector de SmartBacklogIA (app/services/documents/loaders.py). Se usa defusedxml,
+    que rechaza DTD y entidades externas (XXE, «billion laughs»); nunca xml.etree directo.
+    """
+    from defusedxml import ElementTree as SafeET
+    from defusedxml.common import DefusedXmlException
+
+    try:
+        raiz = SafeET.fromstring(data)
+    except (DefusedXmlException, SafeET.ParseError) as exc:
+        return Documento(nombre, "bpmn", aviso=f"BPMN inválido o con construcciones XML no permitidas ({type(exc).__name__}).")
+
+    local = lambda tag: tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""  # noqa: E731
+    nombres: dict[str, str] = {}
+    carriles: dict[str, str] = {}
+    for el in raiz.iter():
+        if el.get("id"):
+            nombres[el.get("id")] = el.get("name") or el.get("id")
+        if local(el.tag) == "lane":
+            carril = el.get("name") or el.get("id", "")
+            for ref in el:
+                if local(ref.tag) == "flowNodeRef" and ref.text:
+                    carriles[ref.text.strip()] = carril
+
+    procesos, actividades, decisiones, eventos, flujos = [], [], [], [], []
+    for el in raiz.iter():
+        tipo, nom = local(el.tag), el.get("name") or ""
+        doc = next((c.text.strip() for c in el if local(c.tag) == "documentation" and c.text), "")
+        if tipo == "process":
+            procesos.append(nom or el.get("id", "proceso"))
+        elif tipo == "task" or tipo.endswith("Task") or tipo in ("subProcess", "callActivity"):
+            carril = carriles.get(el.get("id", ""), "")
+            actividades.append(f"- [{tipo}] {nom or el.get('id', '')}" + (f" (carril: {carril})" if carril else "")
+                               + (f": {doc}" if doc else ""))
+        elif tipo.endswith("Gateway"):
+            decisiones.append(f"- {nom or tipo}" + (f": {doc}" if doc else ""))
+        elif tipo.endswith("Event"):
+            eventos.append(f"- [{tipo}] {nom or el.get('id', '')}")
+        elif tipo == "sequenceFlow":
+            origen, destino = nombres.get(el.get("sourceRef", ""), el.get("sourceRef")), nombres.get(el.get("targetRef", ""), el.get("targetRef"))
+            flujos.append(f"- {origen} → {destino}" + (f" [{nom}]" if nom else ""))
+
+    lineas = ["# Proceso BPMN"]
+    for titulo, items in (("Procesos", [f"- {p}" for p in procesos]),
+                          ("Participantes (carriles)", [f"- {c}" for c in sorted(set(carriles.values())) if c]),
+                          ("Actividades", actividades), ("Decisiones", decisiones), ("Eventos", eventos),
+                          ("Flujo", flujos)):
+        if items:
+            lineas += ["", f"## {titulo}", *items]
+    if len(lineas) == 1:
+        return Documento(nombre, "bpmn", aviso="El BPMN no contiene procesos ni actividades reconocibles.")
+    return _partes(nombre, "bpmn", "\n".join(lineas))
 
 
 # ---------------------------------------------------------------------- ayudas

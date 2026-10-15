@@ -106,6 +106,10 @@ class StoryRecord(BaseModel):
     quality_score: float | None = None
     confidence: float | None = None
     last_error: str = ""
+    version: int = Field(0, description="Sube con cada propuesta, decisión o estimación: la interfaz la envía "
+                                        "con la decisión y se rechaza (409) si la historia cambió.")
+    human_estimate: dict = Field(default_factory=dict, description="Estimación ajustada por una persona "
+                                                                   "(prevalece sobre la del agente).")
     history: list[Transition] = Field(default_factory=list)
 
 
@@ -121,10 +125,14 @@ class RunSummary(BaseModel):
     errors: dict[str, str] = Field(default_factory=dict)
     skipped: list[str] = Field(default_factory=list)
     generation: str = Field("", description="generadas / regeneradas / reutilizadas si se usó el generador.")
+    tokens_in: int = 0
+    tokens_out: int = Field(0, description="Tokens de respuesta, incluidos los de razonamiento.")
+    cost_usd: float | None = Field(None, description="Costo estimado con los precios configurados.")
 
 
 class ProjectState(BaseModel):
     project_id: str
+    version: int = Field(0, description="Sube en cada guardado; StateService rechaza guardar sobre una versión más nueva.")
     project_name: str = ""
     root_path: str = ""
     state: WorkflowState = S.DISCOVERED

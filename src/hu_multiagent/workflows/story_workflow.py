@@ -4,12 +4,13 @@
     ├── story_analyst_agent            (LLM)
     ├── parallel_review (ParallelAgent)
     │   ├── architecture_agent         (LLM)
-    │   └── qa_agent                   (LLM)
+    │   ├── qa_agent                   (LLM)
+    │   └── estimation_agent           (LLM: tipo y factores; los puntos se calculan en código)
     ├── review_aggregator_agent        (determinista)
     └── hitl_evaluator_agent           (determinista)
 
-Fase 2: agregar security, requirements_validator y estimation a parallel_review
-(una línea cada uno) y dependency a nivel de proyecto.
+Fase 2: agregar security y requirements_validator a parallel_review (una línea cada
+uno) y dependency a nivel de proyecto.
 """
 
 from __future__ import annotations
@@ -18,11 +19,12 @@ from google.adk.agents import ParallelAgent, SequentialAgent
 
 from ..agents.aggregator.agent import build_review_aggregator
 from ..agents.architecture.agent import build_architecture_agent
+from ..agents.estimation.agent import build_estimation_agent
 from ..agents.hitl_evaluator.agent import build_hitl_evaluator
 from ..agents.qa.agent import build_qa_agent
 from ..agents.story_analyst.agent import build_story_analyst
 
-PARALLEL_AGENTS = ("architecture_agent", "qa_agent")
+PARALLEL_AGENTS = ("architecture_agent", "qa_agent", "estimation_agent")
 
 
 def build_story_workflow(model, confidence_auto: float = 0.85, confidence_review: float = 0.60,
@@ -30,7 +32,7 @@ def build_story_workflow(model, confidence_auto: float = 0.85, confidence_review
     parallel = ParallelAgent(
         name="parallel_review",
         description="Evaluaciones independientes de la historia en paralelo.",
-        sub_agents=[build_architecture_agent(model), build_qa_agent(model)],
+        sub_agents=[build_architecture_agent(model), build_qa_agent(model), build_estimation_agent(model)],
     )
     return SequentialAgent(
         name="story_workflow",

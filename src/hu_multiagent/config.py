@@ -18,6 +18,18 @@ def _i(name: str, default: int) -> int:
     return int(os.getenv(name, str(default)))
 
 
+def _precio(name: str) -> float | None:
+    v = os.getenv(name, "").strip()
+    return float(v) if v else None
+
+
+# Precio de lista en USD por millón de tokens (texto) en Vertex AI, como referencia cuando no se
+# configura HU_PRECIO_ENTRADA_1M / HU_PRECIO_SALIDA_1M. Los tokens de razonamiento se cobran como salida.
+# Verifica los valores vigentes en https://cloud.google.com/vertex-ai/generative-ai/pricing
+PRECIOS_REFERENCIA = {"gemini-2.5-flash": (0.30, 2.50)}
+MODELOS_SIMULADOS = ("simulado", "demo")
+
+
 @dataclass(frozen=True)
 class HuSettings:
     # Entrada (solo lectura) y salida (resultados, estado y auditoría) separadas.
@@ -38,11 +50,36 @@ class HuSettings:
     max_generated_stories: int = 12
     generation_context_max_chars: int = 150000
     generated_requires_approval: bool = False
+    # Costo estimado (USD por millón de tokens); None = usa PRECIOS_REFERENCIA si el modelo está ahí
+    price_input_1m: float | None = None
+    price_output_1m: float | None = None
     extra: dict = field(default_factory=dict)
 
     @property
     def effective_state_uri(self) -> str:
         return self.state_uri or self.results_uri
+
+    @property
+    def prices(self) -> tuple[float, float] | None:
+        if self.price_input_1m is not None and self.price_output_1m is not None:
+            return self.price_input_1m, self.price_output_1m
+        return PRECIOS_REFERENCIA.get(self.model if isinstance(self.model, str) else "")
+
+    def cost_usd(self, tokens_in: int, tokens_out: int) -> float | None:
+        """Costo estimado de una llamada; None si no hay precio para el modelo."""
+        if not self.prices or (not tokens_in and not tokens_out):
+            return None
+        pin, pout = self.prices
+        return round((tokens_in * pin + tokens_out * pout) / 1_000_000, 6)
+
+
+def resolve_model(model):
+    """Nombre del modelo de Gemini, o el modelo simulado si HU_MODEL=simulado (modo demostración)."""
+    if isinstance(model, str) and model.strip().lower() in MODELOS_SIMULADOS:
+        from .simulado import ModeloSimulado
+
+        return ModeloSimulado()
+    return model
 
 
 def get_hu_settings() -> HuSettings:
@@ -62,4 +99,6 @@ def get_hu_settings() -> HuSettings:
         max_generated_stories=_i("HU_MAX_HISTORIAS_GENERADAS", 12),
         generation_context_max_chars=_i("HU_CONTEXTO_GENERACION_MAX_CARACTERES", 150000),
         generated_requires_approval=os.getenv("HU_GENERADAS_REQUIEREN_APROBACION", "false").lower() in ("1", "true", "si", "sí"),
+        price_input_1m=_precio("HU_PRECIO_ENTRADA_1M"),
+        price_output_1m=_precio("HU_PRECIO_SALIDA_1M"),
     )

@@ -10,13 +10,22 @@ from google.genai import types
 
 from ...models.agent_response import AgentResponse, AgentStatus, AggregatedReview
 from ...models.common import Finding, Severity, Statement, StatementType
-from ...models.user_story import ArchitectureReviewOutput, QATestOutput, ReviewStatus, StoryAnalysisOutput
-from ..common import K_AGG, K_ANALYSIS, K_ARCH, K_PROJECT_ID, K_QA, K_STORY
+from ...models.user_story import (
+    ArchitectureReviewOutput,
+    EstimationOutput,
+    QATestOutput,
+    ReviewStatus,
+    StoryAnalysisOutput,
+)
+from ...services.estimation import from_agent_output
+from ..common import K_AGG, K_ANALYSIS, K_ARCH, K_EST, K_PROJECT_ID, K_QA, K_STORY
 from .prompt import DESCRIPTION
 
 ORDER = [AgentStatus.OK, AgentStatus.APPROVED, AgentStatus.APPROVED_WITH_OBSERVATIONS,
          AgentStatus.NEEDS_CHANGES, AgentStatus.BLOCKED, AgentStatus.CRITICAL_RISK, AgentStatus.ERROR]
 APPROVING = {AgentStatus.APPROVED, AgentStatus.APPROVED_WITH_OBSERVATIONS}
+# Agentes cuya salida informa pero no decide: no entran en la confianza mínima ni en los faltantes.
+INFORMATIVE_AGENTS = {"estimation_agent"}
 
 
 def _sources(*groups) -> list[str]:
@@ -84,8 +93,26 @@ def qa_response(pid: str, q: QATestOutput) -> AgentResponse:
     )
 
 
+def estimation_response(pid: str, e: EstimationOutput, estimate: dict | None, error: str) -> AgentResponse:
+    if estimate:
+        spike = estimate["spike"]["required"]
+        resumen = (f"{e.story_type.value}: {estimate['points']} pts (rango {estimate['range']['min']}–"
+                   f"{estimate['range']['max']})" + (f" + spike de {estimate['spike']['points']} pts" if spike else "")
+                   + f". {e.rationale}")
+        status = AgentStatus.APPROVED_WITH_OBSERVATIONS if spike else AgentStatus.APPROVED
+    else:
+        resumen, status = f"Sin estimación: {error}", AgentStatus.APPROVED_WITH_OBSERVATIONS
+    return AgentResponse(
+        agent="estimation_agent", project_id=pid, story_id=e.story_id, status=status, confidence=e.confidence,
+        summary=resumen.strip(), next_agent="review_aggregator_agent",
+        metadata={"story_type": e.story_type.value, "type_justification": e.type_justification,
+                  "rationale": e.rationale, "estimate": estimate, "error": error},
+    )
+
+
 def aggregate(
-    project_id: str, story: dict, analysis: dict | None, arch: dict | None, qa: dict | None
+    project_id: str, story: dict, analysis: dict | None, arch: dict | None, qa: dict | None,
+    estimation: dict | None = None,
 ) -> AggregatedReview:
     responses: list[AgentResponse] = []
     missing = []
@@ -104,9 +131,14 @@ def aggregate(
         responses.append(qa_response(project_id, q))
     else:
         missing.append("qa_agent")
+    e = EstimationOutput.model_validate(estimation) if estimation else None
+    estimate, est_error = from_agent_output(e.model_dump(mode="json") if e else None)
+    if e:
+        responses.append(estimation_response(project_id, e, estimate, est_error))
 
     conflicts: list[Finding] = []
-    approving = [x.agent for x in responses if x.status in APPROVING]
+    decisivas = [x for x in responses if x.agent not in INFORMATIVE_AGENTS]
+    approving = [x.agent for x in decisivas if x.status in APPROVING]
     critical = [x.agent for x in responses if x.status == AgentStatus.CRITICAL_RISK]
     if approving and critical:
         conflicts.append(Finding(
@@ -123,7 +155,7 @@ def aggregate(
             description=f"story_analyst_agent califica la historia como testeable ({a.invest_score.testable}/5) "
                         f"pero qa_agent encontró {len(q.untestable_criteria)} criterio(s) no verificable(s)."))
 
-    overall = max((x.status for x in responses), key=ORDER.index, default=AgentStatus.ERROR)
+    overall = max((x.status for x in decisivas), key=ORDER.index, default=AgentStatus.ERROR)
     if missing:
         overall = AgentStatus.ERROR
     agent_requests = [f"{x.agent}: {x.metadata.get('hitl_reason') or 'solicita revisión humana'}"
@@ -134,7 +166,7 @@ def aggregate(
         responses=responses,
         conflicts=conflicts,
         overall_status=overall,
-        confidence=min((x.confidence for x in responses), default=0.0),
+        confidence=min((x.confidence for x in decisivas), default=0.0),
         critical_changes=[c.value for c in (r.critical_changes if r else [])],
         blocking_questions=[x for x in (a.missing_information if a else []) if x.blocking],
         criteria_count=len(story.get("acceptance_criteria") or []),
@@ -143,13 +175,16 @@ def aggregate(
         agent_hitl_requests=agent_requests,
         sources=sorted({s for x in responses for s in x.sources}),
         missing_agents=missing,
+        estimation=estimate,
+        estimation_error=est_error,
     )
 
 
 class ReviewAggregatorAgent(BaseAgent):
     async def _run_async_impl(self, ctx) -> AsyncGenerator[Event, None]:
         st = ctx.session.state
-        agg = aggregate(st.get(K_PROJECT_ID, ""), st.get(K_STORY) or {}, st.get(K_ANALYSIS), st.get(K_ARCH), st.get(K_QA))
+        agg = aggregate(st.get(K_PROJECT_ID, ""), st.get(K_STORY) or {}, st.get(K_ANALYSIS), st.get(K_ARCH), st.get(K_QA),
+                        st.get(K_EST))
         texto = (f"Revisión agregada de {agg.story_id}: estado {agg.overall_status.value}, "
                  f"confianza {agg.confidence:.2f}, {len(agg.conflicts)} conflicto(s).")
         yield Event(

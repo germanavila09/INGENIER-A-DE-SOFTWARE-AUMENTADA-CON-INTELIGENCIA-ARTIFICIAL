@@ -17,6 +17,7 @@ dependencies = [
     "python-docx>=1.1",
     "python-pptx>=1.0",
     "openpyxl>=3.1",
+    "defusedxml>=0.7",          # modelos BPMN sin riesgo de XXE
     # sistema multiagente
     "pyyaml>=6.0",
     "pydantic>=2.6",

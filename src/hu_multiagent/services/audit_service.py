@@ -43,6 +43,7 @@ class AuditEntry(BaseModel):
     hitl: int | None = None
     latency_ms: int | None = None
     tokens: dict[str, int] = Field(default_factory=dict)
+    cost_usd: float | None = None
     errors: list[str] = Field(default_factory=list)
     # Para modificaciones propuestas (sección 19)
     before: str = ""

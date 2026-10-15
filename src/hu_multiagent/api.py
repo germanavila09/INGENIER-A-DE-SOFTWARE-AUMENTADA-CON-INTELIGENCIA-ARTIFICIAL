@@ -6,7 +6,10 @@ el chat de ADK y la interfaz ven y modifican el mismo estado.
 
 Reglas que se mantienen aquí:
 - Las decisiones humanas solo entran por esta API (o por el chat): ningún agente las toma.
-- Un proyecto no admite dos ejecuciones a la vez (409 mientras haya una en curso).
+- Un proyecto no admite dos ejecuciones a la vez (409 mientras haya una en curso), y una
+  decisión no se aplica mientras el motor trabaja en ese proyecto (409 «ocupado»).
+- Las decisiones y estimaciones pueden enviar la ``version`` de la historia que se vio; si la
+  historia cambió desde entonces, se rechazan con 409 «conflicto».
 - La carga de documentos es la única escritura sobre la entrada (bucket de proyectos).
 """
 
@@ -130,11 +133,19 @@ def _resolver(project_id: str) -> tuple[Any, str, str]:
 
 
 def _ocupado(eng, pid: str) -> bool:
-    """Trabajo de la interfaz en curso, o análisis lanzado desde el chat (el motor tiene el candado)."""
+    """Trabajo de la interfaz en curso, o análisis lanzado desde el chat (el motor tiene el candado del proyecto)."""
     if _en_curso(pid):
         return True
     etapa = (eng.progress.get(pid) or {}).get("etapa")
-    return eng._lock.locked() and etapa not in (None, "terminado", "error")
+    return eng.busy(pid) and etapa not in (None, "terminado", "error")
+
+
+def _o_error(r: dict) -> dict:
+    """Respuesta del motor → HTTP: ocupado y conflicto son 409; cualquier otro error, 400."""
+    if r.get("status") == "error":
+        codigo = r.get("codigo")
+        raise HTTPException(409 if codigo in ("ocupado", "conflicto") else 400, r.get("mensaje", "No se pudo aplicar."))
+    return r
 
 
 def _sin_trabajo(pid: str) -> None:
@@ -351,6 +362,35 @@ def _respuestas(agg: dict) -> list[dict]:
              "resumen": r.get("summary", "")} for r in agg.get("responses", [])]
 
 
+TIPO_UI = {"HU_IA": "HU-IA", "HU_TRADICIONAL": "HU-Tradicional"}
+
+
+def _tipo_y_estimacion(rec, est_file: dict, ia: list[dict]) -> tuple[str, str, str, dict | None]:
+    """Tipo de la historia y estimación que se muestran: primero la de una persona, luego la del agente
+    de estimación y, si no hay ninguna, el tipo según los impactos ai_ml de arquitectura."""
+    salida = est_file.get("output") or {}
+    del_agente = est_file.get("estimate")
+    humano = rec.human_estimate or {}
+    est = humano or del_agente
+    if humano:
+        tipo, motivo, origen = humano.get("story_type"), humano.get("comment") or f"Ajustada por {humano.get('decided_by')}", "humano"
+    elif salida.get("story_type"):
+        tipo, motivo, origen = salida["story_type"], salida.get("type_justification", ""), "ia"
+    else:
+        tipo, motivo, origen = ("HU_IA" if ia else "HU_TRADICIONAL"), "; ".join(i.get("description", "") for i in ia), \
+            ("arquitectura" if ia else "")
+    estimacion = None
+    if est:
+        estimacion = {"puntos": est["points"], "rango": est["range"], "spike": est["spike"], "metodo": est["method"],
+                      "factores": est["factors"], "puntaje": est.get("raw_score"), "origen": "humano" if humano else "ia",
+                      "justificacion": humano.get("comment") if humano else salida.get("rationale", ""),
+                      "decidido_por": humano.get("decided_by", ""),
+                      "agente": {"puntos": del_agente["points"], "factores": del_agente["factors"]} if humano and del_agente else None}
+    elif est_file.get("error"):
+        estimacion = {"puntos": None, "error": est_file["error"], "origen": "ia"}
+    return TIPO_UI.get(tipo, "HU-Tradicional"), motivo, origen, estimacion
+
+
 def construir_backlog(eng, pid: str) -> dict:
     state = eng.state.load(pid)
     store = eng.results_store(pid)
@@ -375,9 +415,11 @@ def construir_backlog(eng, pid: str) -> dict:
         arch = (store.read_json(f"{base}/architecture_review.json") or {}).get("output") or {}
         tests = (store.read_json(f"{base}/tests.json") or {}).get("output") or {}
         agg = store.read_json(f"{base}/aggregated_review.json") or {}
+        est_file = store.read_json(f"{base}/estimation.json") or {}
         mods = rec.human_modifications or {}
 
         ia = [i for i in arch.get("impacts", []) if i.get("area") == "ai_ml"]
+        tipo, tipo_motivo, tipo_origen, estimacion = _tipo_y_estimacion(rec, est_file, ia)
         decision = None
         if rec.state == S.WAITING_FOR_HUMAN and rec.pending_decision_id in state.decisions:
             r = state.decisions[rec.pending_decision_id].request
@@ -390,8 +432,8 @@ def construir_backlog(eng, pid: str) -> dict:
         historias.append({
             "id": sid, "titulo": mods.get("title") or story.title or rec.title, "epica": story.epic or "Sin épica",
             "origen": story.origin, "fuente": story.source,
-            "tipo": "HU-IA" if ia else "HU-Tradicional",
-            "tipo_motivo": "; ".join(i.get("description", "") for i in ia),
+            "tipo": tipo, "tipo_motivo": tipo_motivo, "tipo_origen": tipo_origen, "estimacion": estimacion,
+            "version": rec.version,
             "prioridad": prioridad, "prioridad_motivo": "" if mods.get("priority") else story.priority_reason,
             "prioridad_origen": "humano" if mods.get("priority") else ("ia" if story.origin == "generated" else
                                                                       ("documento" if story.priority else "")),
@@ -447,6 +489,9 @@ def construir_backlog(eng, pid: str) -> dict:
         "listas": cuenta(lambda h: h["estado_ui"] == "lista"),
         "descartadas": len(historias) - len(vivas),
         "prioridad": {p: cuenta(lambda h, p=p: h["prioridad"] == p) for p in ("Alta", "Media", "Baja")},
+        "puntos": sum((h["estimacion"] or {}).get("puntos") or 0 for h in vivas),
+        "estimadas": cuenta(lambda h: bool((h["estimacion"] or {}).get("puntos"))),
+        "spikes": cuenta(lambda h: bool(((h["estimacion"] or {}).get("spike") or {}).get("required"))),
         "calidad_promedio": round(sum(h["calidad"] for h in vivas if h["calidad"] is not None)
                                   / max(1, cuenta(lambda h: h["calidad"] is not None)), 1),
     }
@@ -473,6 +518,7 @@ class Decision(BaseModel):
     decision: str
     comentario: str = Field("", max_length=4000)
     modificaciones: dict = Field(default_factory=dict)
+    version: int | None = Field(None, description="Versión de la historia que vio quien decide (409 si cambió).")
 
 
 @router.post("/projects/{project_id}/stories/{story_id}/decision")
@@ -494,13 +540,30 @@ async def decidir(project_id: str, story_id: str, body: Decision, x_usuario: str
             raise HTTPException(400, f"{sid} ya tuvo {eng.settings.max_reanalysis} refinamientos: apruébala o descártala.")
         if rec.state not in (S.READY_FOR_IMPLEMENTATION, S.WAITING_FOR_HUMAN):
             raise HTTPException(400, f"{sid} está en {rec.state.value}; ahora no se puede refinar.")
+        if body.version is not None and body.version != rec.version:
+            raise HTTPException(409, f"{sid} cambió desde que la abriste; recarga el backlog y vuelve a decidir.")
         trabajo = _iniciar(pid, "refinamiento", lambda: eng.human_action(
-            pid, sid, d, body.comentario.strip(), body.modificaciones, usuario), detalle=sid)
+            pid, sid, d, body.comentario.strip(), body.modificaciones, usuario, expected_version=body.version),
+            detalle=sid)
         return JSONResponse({"status": "en_curso", "story_id": sid, "trabajo": trabajo}, status_code=202)
-    r = await eng.human_action(pid, sid, d, body.comentario.strip(), body.modificaciones, usuario)
-    if r.get("status") == "error":
-        raise HTTPException(400, r.get("mensaje", "No se pudo aplicar la decisión."))
-    return r
+    return _o_error(await eng.human_action(pid, sid, d, body.comentario.strip(), body.modificaciones, usuario,
+                                           expected_version=body.version))
+
+
+class Estimacion(BaseModel):
+    tipo: str = Field(description="HU_IA o HU_TRADICIONAL")
+    factores: dict[str, int]
+    comentario: str = Field("", max_length=1000)
+    version: int | None = None
+
+
+@router.post("/projects/{project_id}/stories/{story_id}/estimate")
+async def estimar(project_id: str, story_id: str, body: Estimacion, x_usuario: str | None = Header(None)) -> dict:
+    """Una persona ajusta el tipo y los factores; el servidor calcula puntos, rango y spike con el mismo método."""
+    eng, pid, _ = _resolver(project_id)
+    _sin_trabajo(pid)
+    return _o_error(await eng.estimate_story(pid, story_id, body.tipo, body.factores, body.comentario.strip(),
+                                             _usuario(x_usuario), expected_version=body.version))
 
 
 class Epica(BaseModel):
@@ -511,7 +574,7 @@ class Epica(BaseModel):
 async def aprobar_epica(project_id: str, body: Epica, x_usuario: str | None = Header(None)) -> dict:
     eng, pid, _ = _resolver(project_id)
     _sin_trabajo(pid)
-    return await eng.approve_epic(pid, body.epica, _usuario(x_usuario))
+    return _o_error(await eng.approve_epic(pid, body.epica, _usuario(x_usuario)))
 
 
 @router.get("/projects/{project_id}/stories/{story_id}/explain")
@@ -525,6 +588,7 @@ def explicar(project_id: str, story_id: str) -> dict:
 
 # ==================================================================== exportar
 COLUMNAS = ["id", "titulo", "epica", "tipo", "origen", "prioridad", "estado", "nivel_hitl", "calidad", "confianza",
+            "puntos", "rango_puntos", "spike_puntos", "metodo_estimacion", "estimacion_por",
             "narrativa", "criterios", "depende_de", "aprobada_por_humano"]
 
 
@@ -546,10 +610,15 @@ def exportar(project_id: str, formato: str = Query("json", pattern="^(json|csv)$
     w.writerow(COLUMNAS)
     for h in vigentes:
         prop = h.get("propuesta") or {}
+        est = h.get("estimacion") or {}
+        rango = est.get("rango") or {}
         w.writerow([h["id"], prop.get("title") or h["titulo"], h["epica"], h["tipo"],
                     "IA" if h["origen"] == "generated" else "documento", h["prioridad"], h["estado_ui"],
                     h["hitl"]["nivel"], h["calidad"] if h["calidad"] is not None else "",
                     h["confianza"] if h["confianza"] is not None else "",
+                    est.get("puntos") or "", f"{rango['min']}-{rango['max']}" if rango else "",
+                    (est.get("spike") or {}).get("points") or "", est.get("metodo") or "",
+                    {"humano": "persona", "ia": "agente"}.get(est.get("origen"), "") if est.get("puntos") else "",
                     prop.get("narrative") or h["original"]["narrativa"],
                     " | ".join(prop.get("acceptance_criteria") or h["original"]["criterios"]),
                     ", ".join(h["depende_de"]), "sí" if h["aprobada_por_humano"] else "no"])

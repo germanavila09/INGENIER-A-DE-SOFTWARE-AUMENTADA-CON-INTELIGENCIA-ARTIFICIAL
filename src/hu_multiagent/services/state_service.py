@@ -3,6 +3,13 @@
 Backend: JSON en el destino de estado (carpeta local o gs://). Cada proyecto se
 guarda en projects/<project_id>/state/project_state.json. La interfaz permite
 cambiar a Firestore sin tocar los agentes (fase 2).
+
+Concurrencia: dentro de un proceso, el motor serializa las escrituras de cada proyecto
+con un candado. Entre procesos (dos servidores sobre el mismo bucket), cada guardado
+compara la versión leída con la guardada y rechaza pisar una más nueva
+(ConcurrentModification). Es una verificación optimista, no una transacción: la ventana
+entre leer y escribir sigue existiendo; cerrarla del todo requiere precondiciones de
+generación de GCS o Firestore.
 """
 
 from __future__ import annotations
@@ -25,6 +32,10 @@ from .storage_service import ProjectStore, make_backend
 STATE_FILE = "state/project_state.json"
 
 
+class ConcurrentModification(Exception):
+    """Otro proceso guardó el estado del proyecto después de que este lo leyera."""
+
+
 class StateService:
     def __init__(self, state_uri: str, backend=None) -> None:
         self.uri = state_uri
@@ -45,7 +56,19 @@ class StateService:
 
     def save(self, state: ProjectState) -> None:
         with self._lock:
-            self.store(state.project_id).write_json(STATE_FILE, state)
+            store = self.store(state.project_id)
+            guardado = store.read_json(STATE_FILE)
+            actual = int((guardado or {}).get("version", 0) or 0)
+            if guardado is not None and actual != state.version:
+                raise ConcurrentModification(
+                    f"El estado de {state.project_id} cambió en otro proceso (versión {actual}, se esperaba "
+                    f"{state.version}). Vuelve a cargarlo y repite la operación.")
+            state.version = actual + 1
+            try:
+                store.write_json(STATE_FILE, state)
+            except Exception:
+                state.version = actual
+                raise
 
     # ----------------------------------------------------------- transiciones
     def transition_project(

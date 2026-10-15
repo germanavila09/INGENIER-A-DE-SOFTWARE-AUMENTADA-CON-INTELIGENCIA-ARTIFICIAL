@@ -17,7 +17,7 @@ from google.genai import types
 
 from adk_ing.agente import build_bucket_agent
 
-from ...config import get_hu_settings
+from ...config import get_hu_settings, resolve_model
 from ...tools.hitl_tools import guardia_orquestador, listar_decisiones_pendientes, registrar_decision_humana
 from .prompt import PROMPT
 from .tools import analizar_proyecto, descubrir_proyectos, estado_proyecto, explicar_historia
@@ -26,7 +26,7 @@ from .tools import analizar_proyecto, descubrir_proyectos, estado_proyecto, expl
 def build_orchestrator(model=None, bucket_agent_model=None) -> LlmAgent:
     agente_documentos = build_bucket_agent(
         name="agente_documentos",
-        model=bucket_agent_model or model or get_hu_settings().model,
+        model=bucket_agent_model or model or resolve_model(get_hu_settings().model),
         description=("Agente del bucket: busca en el contenido de todos los documentos de gs://adk_ing, los lista "
                      "y los lee (PDF, Word, Excel, PowerPoint, texto), y responde citando documento y página. "
                      "Úsalo para saber qué documentos hay o qué dice un documento."),
@@ -34,7 +34,7 @@ def build_orchestrator(model=None, bucket_agent_model=None) -> LlmAgent:
     return LlmAgent(
         name="orchestrator_agent",
         description="Coordina el análisis multiagente de historias de usuario por proyecto, con HITL y trazabilidad.",
-        model=model or get_hu_settings().model,
+        model=model or resolve_model(get_hu_settings().model),
         instruction=PROMPT,
         tools=[
             descubrir_proyectos,

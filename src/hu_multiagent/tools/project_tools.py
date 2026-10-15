@@ -76,6 +76,8 @@ def classify(inner_path: str) -> C:
     for keys, cat in KEYWORD_CATEGORY:
         if any(k in name for k in keys):
             return cat
+    if p.suffix.lower() == ".bpmn":  # modelo de proceso: describe el comportamiento funcional
+        return C.FUNCTIONAL
     return C.OTHER
 
 

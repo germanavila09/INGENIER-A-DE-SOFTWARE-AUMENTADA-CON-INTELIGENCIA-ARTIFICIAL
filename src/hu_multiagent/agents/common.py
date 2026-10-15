@@ -19,6 +19,7 @@ K_FEEDBACK = "human_feedback"        # corrección humana tras MODIFIED (texto)
 K_ANALYSIS = "story_analysis"
 K_ARCH = "architecture_review"
 K_QA = "qa_review"
+K_EST = "estimation"
 K_AGG = "aggregated_review"
 K_HITL = "hitl_evaluation"
 

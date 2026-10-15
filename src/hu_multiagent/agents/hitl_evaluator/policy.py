@@ -23,6 +23,8 @@ CRITICAL_CHANGE_CODES = {
     "CROSS_PROJECT_IMPACT": ("CROSS_PROJECT_IMPACT", "Decisión que puede afectar otros proyectos"),
 }
 IRREVERSIBLE = {"DATA_MIGRATION", "DATA_DELETION", "COMPONENT_REMOVAL", "IRREVERSIBLE_CHANGE"}
+# Motivos que nunca detienen el flujo por sí solos (nivel 1): no se listan como causa de una pausa.
+REVIEW_ONLY_CODES = {"MEDIUM_CONFIDENCE", "WORDING_IMPROVEMENT", "SPIKE_REQUIRED", "ESTIMATION_INCOMPLETE"}
 
 
 def evaluate_hitl(
@@ -109,6 +111,19 @@ def evaluate_hitl(
     if agg.suggested_changes_count and not story_approved:
         review.append(HitlReason(code="WORDING_IMPROVEMENT", agent="story_analyst_agent", severity=Severity.LOW,
                                  description=f"{agg.suggested_changes_count} mejora(s) de redacción propuesta(s)."))
+
+    # 11. Estimación (método de factores): informativa, solo pide revisión.
+    est = agg.estimation or {}
+    if est.get("spike", {}).get("required"):
+        f = est.get("factors", {})
+        review.append(HitlReason(
+            code="SPIKE_REQUIRED", agent="estimation_agent", severity=Severity.MEDIUM,
+            description=f"HU-IA con datos {f.get('datos')}/5 y riesgo {f.get('riesgo')}/5: planear un spike de "
+                        f"{est['spike']['points']} pts antes de comprometer la historia."))
+    elif agg.estimation_error:
+        review.append(HitlReason(code="ESTIMATION_INCOMPLETE", agent="estimation_agent", severity=Severity.LOW,
+                                 description=f"Sin estimación automática ({agg.estimation_error}) "
+                                             "Puedes estimarla a mano."))
 
     reversible = not any(c in IRREVERSIBLE for c in agg.critical_changes)
     if stop:
