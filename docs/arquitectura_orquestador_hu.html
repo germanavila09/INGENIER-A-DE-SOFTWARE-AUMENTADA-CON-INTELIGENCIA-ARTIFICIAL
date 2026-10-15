@@ -326,7 +326,8 @@ footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); }
           <tr><td>story_analyst_agent</td><td><span class="tag llm">LLM</span></td><td><code>story_workflow</code></td><td>current_story · project_context · human_feedback</td><td><code>story_analysis</code></td><td><code>guardia_de_proyecto</code> · <code>sellar_salida</code></td></tr>
           <tr><td>architecture_agent</td><td><span class="tag llm">LLM</span></td><td><code>parallel_review</code></td><td>historia · story_analysis · contexto</td><td><code>architecture_review</code></td><td>igual que el analista</td></tr>
           <tr><td>qa_agent</td><td><span class="tag llm">LLM</span></td><td><code>parallel_review</code></td><td>historia · story_analysis · contexto</td><td><code>qa_review</code></td><td>igual que el analista</td></tr>
-          <tr><td>review_aggregator_agent</td><td><span class="tag det">determinista</span></td><td><code>story_workflow</code></td><td>las tres revisiones</td><td><code>aggregated_review</code></td><td>confianza = la mínima</td></tr>
+          <tr><td>estimation_agent</td><td><span class="tag llm">LLM</span></td><td><code>parallel_review</code></td><td>historia · story_analysis · contexto</td><td><code>estimation</code> (tipo y factores 1-5)</td><td>igual que el analista · los puntos los calcula el código</td></tr>
+          <tr><td>review_aggregator_agent</td><td><span class="tag det">determinista</span></td><td><code>story_workflow</code></td><td>las revisiones</td><td><code>aggregated_review</code> (incluye puntos, rango y spike)</td><td>confianza = la mínima de los agentes que deciden</td></tr>
           <tr><td>hitl_evaluator_agent</td><td><span class="tag det">determinista</span></td><td><code>story_workflow</code></td><td>aggregated_review</td><td><code>hitl_evaluation</code></td><td>reglas de <code>policy.py</code></td></tr>
         </tbody>
       </table>
@@ -340,7 +341,7 @@ footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); }
     <p><code>analizar_proyecto</code> (chat) y <code>POST /api/projects/{id}/analyze</code> (SPB) ejecutan lo mismo: <code>HuEngine.analyze_project()</code>. Primero corre un flujo por proyecto y después un flujo por cada historia seleccionada.</p>
     <figure>
       <div class="scroll">
-      <svg class="wide" viewBox="0 0 1100 700" role="img" aria-label="project_workflow descubre e ingesta los documentos; si no hay historias escritas, story_generator_agent las propone. El motor selecciona hasta 10 historias y, por cada una, story_workflow ejecuta el analista, arquitectura y QA en paralelo, el agregador y el evaluador HITL; el motor aplica el nivel 0, 1 o 2.">
+      <svg class="wide" viewBox="0 0 1100 700" role="img" aria-label="project_workflow descubre e ingesta los documentos; si no hay historias escritas, story_generator_agent las propone. El motor selecciona hasta 10 historias y, por cada una, story_workflow ejecuta el analista; arquitectura, QA y estimación en paralelo; el agregador y el evaluador HITL; el motor aplica el nivel 0, 1 o 2.">
         <defs>
           <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
           <marker id="a3h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-h" d="M0,0 L10,5 L0,10 z"/></marker>
@@ -393,7 +394,7 @@ footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); }
         <text class="lbl" x="575" y="216" text-anchor="middle">por cada historia seleccionada, una tras otra</text>
 
         <!-- story_workflow -->
-        <rect class="group" x="20" y="258" width="1062" height="220" rx="10"/>
+        <rect class="group" x="20" y="258" width="1062" height="236" rx="10"/>
         <text class="sm" x="236" y="280">story_workflow · SequentialAgent</text>
 
         <rect class="b-plain" x="40" y="300" width="160" height="140" rx="8"/>
@@ -410,16 +411,20 @@ footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); }
         <text class="s" x="325" y="376" text-anchor="middle">y preguntas bloqueantes</text>
         <text class="k" x="325" y="404" text-anchor="middle">→ story_analysis</text>
 
-        <rect class="group" x="470" y="292" width="220" height="172" rx="10"/>
-        <text class="sm" x="580" y="307" text-anchor="middle">parallel_review · ParallelAgent</text>
-        <rect class="b-llm" x="482" y="314" width="196" height="66" rx="8"/>
-        <text class="tm" x="580" y="336" text-anchor="middle">architecture_agent</text>
-        <text class="s" x="580" y="353" text-anchor="middle">impactos y cambios críticos</text>
-        <text class="k" x="580" y="371" text-anchor="middle">→ architecture_review</text>
-        <rect class="b-llm" x="482" y="390" width="196" height="66" rx="8"/>
-        <text class="tm" x="580" y="412" text-anchor="middle">qa_agent</text>
-        <text class="s" x="580" y="429" text-anchor="middle">casos de prueba y criterios</text>
-        <text class="k" x="580" y="447" text-anchor="middle">→ qa_review</text>
+        <rect class="group" x="470" y="276" width="220" height="210" rx="10"/>
+        <text class="sm" x="580" y="291" text-anchor="middle">parallel_review · ParallelAgent</text>
+        <rect class="b-llm" x="482" y="298" width="196" height="56" rx="8"/>
+        <text class="tm" x="580" y="317" text-anchor="middle">architecture_agent</text>
+        <text class="s" x="580" y="332" text-anchor="middle">impactos y cambios críticos</text>
+        <text class="k" x="580" y="347" text-anchor="middle">→ architecture_review</text>
+        <rect class="b-llm" x="482" y="361" width="196" height="56" rx="8"/>
+        <text class="tm" x="580" y="380" text-anchor="middle">qa_agent</text>
+        <text class="s" x="580" y="395" text-anchor="middle">casos de prueba y criterios</text>
+        <text class="k" x="580" y="410" text-anchor="middle">→ qa_review</text>
+        <rect class="b-llm" x="482" y="424" width="196" height="56" rx="8"/>
+        <text class="tm" x="580" y="443" text-anchor="middle">estimation_agent</text>
+        <text class="s" x="580" y="458" text-anchor="middle">tipo HU-IA y factores 1-5</text>
+        <text class="k" x="580" y="473" text-anchor="middle">→ estimation</text>
 
         <rect class="b-det" x="745" y="315" width="170" height="104" rx="8"/>
         <text class="tm" x="830" y="340" text-anchor="middle" style="font-size:11px">review_aggregator_agent</text>
@@ -462,7 +467,7 @@ footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); }
         <text class="s" x="900" y="671" text-anchor="middle">cambio crítico, pregunta bloqueante o confianza &lt; 0,60</text>
       </svg>
       </div>
-      <figcaption>Los agentes no conversan entre sí: cada uno lee y escribe claves del estado de la sesión (<code>output_key</code>, en morado y verde) y los agentes de flujo de ADK (<code>SequentialAgent</code>, <code>ParallelAgent</code>) fijan el orden. Solo cuatro agentes llaman a Gemini; el descubrimiento, la ingesta, la agregación y la política HITL son código. En la prueba real con SERVI_SINCHI, el generador propuso 11 historias y el flujo evaluó 10 en 14 minutos; las 10 quedaron en nivel 2 por preguntas bloqueantes.</figcaption>
+      <figcaption>Los agentes no conversan entre sí: cada uno lee y escribe claves del estado de la sesión (<code>output_key</code>, en morado y verde) y los agentes de flujo de ADK (<code>SequentialAgent</code>, <code>ParallelAgent</code>) fijan el orden. Cinco agentes llaman a Gemini; el descubrimiento, la ingesta, la agregación, el cálculo de puntos y la política HITL son código. En la prueba real con SERVI_SINCHI, el generador propuso 11 historias y el flujo evaluó 10 en 14 minutos; las 10 quedaron en nivel 2 por preguntas bloqueantes.</figcaption>
     </figure>
   </section>
 
@@ -487,7 +492,7 @@ footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); }
         <line class="e" x1="560" y1="62" x2="598" y2="62" marker-end="url(#a4)"/>
         <text class="s" x="349" y="30" text-anchor="middle">analista</text>
         <text class="s" x="579" y="30" text-anchor="middle">agregador</text>
-        <text class="s" x="465" y="30" text-anchor="middle">arquitectura ‖ QA</text>
+        <text class="s" x="465" y="30" text-anchor="middle">arquitectura ‖ QA ‖ estimación</text>
 
         <!-- fila 2 -->
         <rect class="b-plain" x="190" y="190" width="100" height="44" rx="22" stroke-dasharray="4 3"/><text class="tm" x="240" y="216" text-anchor="middle">ERROR</text>

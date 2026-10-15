@@ -24,6 +24,7 @@ flowchart TB
         subgraph P[parallel_review · ParallelAgent]
             AR[architecture_agent<br/>LLM]
             QA[qa_agent<br/>LLM]
+            ES[estimation_agent<br/>LLM · factores 1-5]
         end
         P --> AG[review_aggregator_agent<br/>determinista]
         AG --> H[hitl_evaluator_agent<br/>determinista]
@@ -36,7 +37,7 @@ flowchart TB
     E --> RS[(Resultados<br/>projects/ID/generated)]
     IN[(gs://adk_ing<br/>entrada, solo lectura)] --> PW
     GEN --> SW
-    A & AR & QA & GEN -. Vertex AI .-> G[Gemini]
+    A & AR & QA & ES & GEN -. Vertex AI .-> G[Gemini]
 ```
 
 **Tres capas:**
@@ -47,7 +48,7 @@ flowchart TB
 
 ### Por qué algunos agentes son deterministas
 
-Clasificar rutas, extraer texto, combinar revisiones y aplicar una política HITL no requiere un LLM. Hacerlo en código es más barato, reproducible y auditable, y elimina la posibilidad de alucinar en esos pasos. Los LLM se reservan para lo que exige criterio: análisis de la historia, impacto técnico y diseño de pruebas.
+Clasificar rutas, extraer texto, combinar revisiones y aplicar una política HITL no requiere un LLM. Hacerlo en código es más barato, reproducible y auditable, y elimina la posibilidad de alucinar en esos pasos. Los LLM se reservan para lo que exige criterio: análisis de la historia, impacto técnico, diseño de pruebas y puntuación de los factores de esfuerzo. Por la misma razón, el agente de estimación no da puntos: puntúa factores y el código calcula los puntos con el método versionado.
 
 ### Por qué el orquestador no usa transferencias libres
 
@@ -65,10 +66,13 @@ Con `sub_agents` y transferencia, el LLM decide cuándo y a quién ceder el cont
 | `story_analyst_agent` | LLM (`StoryAnalysisOutput`) | historia + contexto | INVEST, ambigüedades, preguntas, propuesta | `agents/story_analyst/prompt.py` |
 | `architecture_agent` | LLM (`ArchitectureReviewOutput`) | historia + análisis + contexto | impactos, cambios críticos, estado | `agents/architecture/prompt.py` |
 | `qa_agent` | LLM (`QATestOutput`) | historia + análisis + contexto | casos Given/When/Then, criterios no verificables | `agents/qa/prompt.py` |
-| `review_aggregator_agent` | `BaseAgent` | las tres revisiones | `AggregatedReview` (contrato común + conflictos) | `agents/aggregator/agent.py` |
+| `estimation_agent` | LLM (`EstimationOutput`, un campo por factor) | historia + análisis + contexto | tipo HU_IA / HU_TRADICIONAL con justificación y factores 1-5 | `agents/estimation/prompt.py` |
+| `review_aggregator_agent` | `BaseAgent` | las revisiones | `AggregatedReview` (contrato común + conflictos + estimación calculada con `services/estimation.py`) | `agents/aggregator/agent.py` |
 | `hitl_evaluator_agent` | `BaseAgent` | revisión agregada | `HitlEvaluation` (nivel 0/1/2) | `agents/hitl_evaluator/policy.py` |
 
-**Fase 2** (no implementados en el MVP): `security_agent`, `requirements_validator_agent` y `estimation_agent` se agregan a `parallel_review` (una línea cada uno en `workflows/story_workflow.py`). `dependency_agent` corre a nivel de proyecto, después de todas las historias. `documentation_agent` (LLM) reemplaza el reporte determinista y `project_context_agent` (LLM) resume el contexto conservando fuentes. Los estados `DEPENDENCY_ANALYSIS`, `ESTIMATING` y `TEST_GENERATION` ya existen en la máquina de estados, y la política HITL ya reconoce cambios de seguridad, costos e impacto en otros proyectos.
+`estimation_agent` es **informativo**: su confianza no entra en el mínimo, no participa en los conflictos y, si falta su salida, la historia queda sin estimar sin detener el flujo. El método de estimación (adoptado de SmartBacklogIA) está en [metodo_estimacion.md](metodo_estimacion.md).
+
+**Fase 2** (no implementados en el MVP): `security_agent` y `requirements_validator_agent` se agregan a `parallel_review` (una línea cada uno en `workflows/story_workflow.py`). `dependency_agent` corre a nivel de proyecto, después de todas las historias. `documentation_agent` (LLM) reemplaza el reporte determinista y `project_context_agent` (LLM) resume el contexto conservando fuentes. Los estados `DEPENDENCY_ANALYSIS`, `ESTIMATING` y `TEST_GENERATION` ya existen en la máquina de estados, y la política HITL ya reconoce cambios de seguridad, costos e impacto en otros proyectos.
 
 ### Contrato entre agentes
 
@@ -159,13 +163,16 @@ flowchart LR
     C4 -- no --> L0[NIVEL 0<br/>AUTO_CONTINUE]
 ```
 
-- La confianza agregada es el **mínimo** de las confianzas de los agentes (criterio conservador). La confianza **no es el único criterio**: un cambio crítico detiene el flujo aunque la confianza sea 0.99.
+- **Estimación** (solo nivel 1, nunca detiene): `SPIKE_REQUIRED` si una HU-IA tiene datos o riesgo ≥ 4; `ESTIMATION_INCOMPLETE` si el agente devolvió factores inválidos.
+- La confianza agregada es el **mínimo** de las confianzas de los agentes que deciden (criterio conservador; el de estimación no cuenta). La confianza **no es el único criterio**: un cambio crítico detiene el flujo aunque la confianza sea 0.99.
 - En nivel 2 se devuelve el payload `WAITING_FOR_HUMAN` (`decision_id, project_id, story_id, reason, agent, recommendation, alternatives, sources, risk, confidence`, más `reasons` y `blocking_questions`).
 - Cómo se aplica cada respuesta humana:
   - **APPROVED:** escribe `approved.json` y la versión `_human_approved`, y pasa la historia a `READY_FOR_IMPLEMENTATION`.
   - **REJECTED:** pasa a `REJECTED`.
   - **MODIFIED:** guarda la versión `_human_modified` y reanaliza con la corrección (límite `HU_MAX_REANALISIS`).
   - **NEEDS_MORE_INFORMATION:** la historia sigue esperando.
+  - **Estimación ajustada** (`POST …/estimate`): valida los factores, calcula con el mismo método, guarda la versión `_human_estimate` y el evento `human_estimate`; prevalece sobre la del agente y viaja en la versión aprobada.
+- **Concurrencia de decisiones:** todas las decisiones toman el candado del proyecto. Si hay un análisis en curso, la decisión se rechaza con `codigo: ocupado` (409 en la API) en lugar de aplicarse y luego perderse cuando el análisis guarde. Si la decisión trae la `version` de la historia que vio el usuario y la historia cambió, se rechaza con `codigo: conflicto` (409). `approve_epic` lee el estado bajo el candado y solo aprueba historias en `READY_FOR_IMPLEMENTATION`; nunca resuelve una solicitud de nivel 2.
 - **Guardia:** `guardia_orquestador` (`before_tool_callback`) solo deja registrar una decisión si el mensaje del usuario contiene la decisión y el `decision_id`, o si hay una única pendiente. El LLM no puede aprobar por su cuenta. La misma guardia limita a 10 las herramientas por turno para evitar loops.
 
 ## 6. Memoria y aislamiento entre proyectos
@@ -206,7 +213,7 @@ HU_RESULTS_URI/projects/PRJ001/        (resultados: escritura)
   generated/
     manifest.json   project_context.json   documents/normalized.json
     user_stories/US-001/
-      original.json  analysis.json  architecture_review.json  tests.json
+      original.json  analysis.json  architecture_review.json  tests.json  estimation.json
       aggregated_review.json  hitl.json  hitl_request.json
       proposed.json  approved.json | rejected.json
       versions/US-001_v1_original.json  US-001_v2_agent_proposal.json
@@ -225,16 +232,18 @@ HU_RESULTS_URI/projects/PRJ001/        (resultados: escritura)
 
 Cada paso deja una entrada en `audit_log.jsonl` y en stdout como JSON (Cloud Logging lo toma como `jsonPayload` en Cloud Run).
 
-- **Campos de cada entrada:** `event, run_id, project_id, story_id, agent, timestamp, input_hash, output_hash, decision, confidence, hitl, latency_ms, tokens, errors`.
+- **Campos de cada entrada:** `event, run_id, project_id, story_id, agent, timestamp, input_hash, output_hash, decision, confidence, hitl, latency_ms, tokens, cost_usd, errors`.
+- **Costo:** `cost_usd` = tokens de entrada × precio de entrada + (tokens de respuesta + de razonamiento) × precio de salida, con `HU_PRECIO_ENTRADA_1M` / `HU_PRECIO_SALIDA_1M` o el precio de lista de `gemini-2.5-flash`. Cada ejecución (`RunSummary`) suma `tokens_in`, `tokens_out` y `cost_usd`. Es una estimación: no incluye los intentos fallidos que se reintentaron ni el chat del orquestador.
 - **Campos de las modificaciones propuestas:** `before, after, reason, source, human_approval`.
-- **Eventos:** `run_started`, `agent_output`, `proposal`, `hitl_request`, `human_decision`, `error`, `run_finished`, `project_discovered`.
+- **Eventos:** `run_started`, `agent_output`, `proposal`, `hitl_request`, `human_decision`, `human_estimate`, `error`, `run_finished`, `project_discovered`.
 
 `explicar_historia` combina transiciones, revisiones por agente, conflictos, evaluación HITL, decisiones, versiones y auditoría. Con eso se responde *«¿por qué esta historia terminó con esta recomendación?»*.
 
 **Errores**
 
 - **Recuperables** (cuota, 5xx, red, JSON inválido del modelo): se reintentan con espera exponencial (`HU_MAX_REINTENTOS`).
-- **No recuperables** (403/401, credenciales, modelo inexistente, datos de otro proyecto): detienen el proyecto en `ERROR` con el motivo.
+- **No recuperables** (403/401, credenciales, modelo inexistente, datos de otro proyecto, estado modificado por otro proceso): detienen el proyecto en `ERROR` con el motivo.
+- **Inesperados** (cualquier otra excepción al procesar una historia): la historia pasa a `ERROR` con el motivo, se audita y la ejecución sigue con las demás.
 
 Hay además un límite de llamadas LLM por historia (`RunConfig.max_llm_calls`).
 
@@ -278,7 +287,8 @@ flowchart LR
 |---|---|
 | Insumos y audios | `InputStorage.write_bytes` (única escritura en la entrada). Audio → Gemini → `<nombre>.transcripcion.txt`, clasificado como acta; la ingesta omite el audio y lee la transcripción |
 | Etapas de «Comprensión» | `HuEngine.progress[pid]`: `fuentes → historias → evaluacion → terminado` con historia actual y conteo |
-| HU-IA / HU-Tradicional | HU-IA si `architecture_agent` reporta un impacto en el área `ai_ml` |
+| HU-IA / HU-Tradicional | Primero la estimación de una persona, luego `estimation_agent`; sin ninguna, HU-IA si `architecture_agent` reporta un impacto `ai_ml` |
+| Puntos, rango y spike | `estimation.json` (agente) o `StoryRecord.human_estimate` (persona); editor de factores en Refinamiento y Validación |
 | Prioridad | `priority` + `priority_reason` del generador (recomendación, se muestra «sugerida»); un humano la cambia al refinar |
 | Aprobar / Refinar / Descartar | `HuEngine.human_action`: si hay decisión HITL pendiente usa `apply_decision`; si la historia ya está lista (nivel 0/1) la aprueba (versión `_human_approved`), la descarta (`READY → REJECTED`) o la reanaliza con la indicación (versión `_human_modified`, máximo `HU_MAX_REANALISIS`) |
 | Aprobar épica | `HuEngine.approve_epic`: aprueba solo las historias listas o para revisar; las que esperan decisión crítica quedan para decidirse una por una |
@@ -287,12 +297,15 @@ flowchart LR
 
 Un proyecto no admite dos análisis a la vez (la API responde 409) y los análisis y refinamientos corren en segundo plano mientras la interfaz consulta el avance.
 
+**Concurrencia.** El motor tiene un `asyncio.Lock` por proyecto: análisis, decisiones, épicas y estimaciones de un proyecto se serializan y proyectos distintos avanzan en paralelo. `discover()` (que la API llama desde otro hilo) arma el mapa de proyectos aparte y lo reemplaza de una vez, y solo escribe el estado de proyectos nuevos; el nombre y la ubicación de uno existente se actualizan al empezar su análisis. `ProjectState.version` sube en cada guardado y `StateService.save` rechaza guardar sobre una versión más nueva (`ConcurrentModification`): protege contra otro proceso sobre el mismo bucket, aunque no es una transacción (cerrar la ventana del todo requiere precondiciones de generación de GCS o Firestore).
+
 ## 11. Límites conocidos del MVP
 
 - El agrupamiento de archivos sueltos depende del prefijo del nombre. Para un control explícito, mueve los archivos a `projects/<carpeta>/` y agrega un `project.yaml`.
 
 - El contexto del proyecto es determinista: extractos y reglas detectadas, no un resumen semántico.
-- Las historias se procesan una tras otra. El paralelismo está dentro de cada historia (arquitectura ‖ QA).
+- Las historias se procesan una tras otra. El paralelismo está dentro de cada historia (arquitectura ‖ QA ‖ estimación) y entre proyectos.
+- El método de estimación es una propuesta calibrable, no un valor empírico: sus pesos y la escala están versionados en el nombre del método (`ia_factores_v1`, `fibonacci_tradicional_v1`).
 - La detección de duplicados y la de contradicciones entre historias corresponden al `requirements_validator_agent` (fase 2). El analista recibe la lista de las otras historias del proyecto para señalarlas.
 - La guardia HITL comprueba palabras de decisión en el mensaje, no entiende negaciones. Es una red de seguridad adicional a las instrucciones del orquestador.
 - La interfaz no tiene autenticación: el nombre de quien decide lo escribe el usuario. Para publicarla fuera del equipo local hay que ponerla detrás de IAP o de un proxy con identidad (fase 2) y tomar el usuario de ahí.

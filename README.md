@@ -100,10 +100,14 @@ Para probar sin el bucket, pon `HU_INPUT_URI=ejemplos/projects` en el `.env`.
 | «¿Qué proyectos hay?» | `descubrir_proyectos`: lista proyectos (carpetas o archivos sueltos agrupados), estado y decisiones pendientes |
 | «¿Qué documentos hay de SINCHI en el storage?» | el orquestador le pregunta al agente del bucket (`agente_documentos`) y responde con citas |
 | «Evaluemos el proyecto SERVI _ SINCHI» | sin historias escritas: genera el backlog desde las notas (*IA*, con evidencia) y lo evalúa; las historias quedan en revisión |
-| «Analiza PRJ001» | flujo completo: manifest → ingesta → contexto → por historia: analista → [arquitectura ‖ QA] → agregador → evaluador HITL |
+| «Analiza PRJ001» | flujo completo: manifest → ingesta → contexto → por historia: analista → [arquitectura ‖ QA ‖ estimación] → agregador → evaluador HITL |
 | «MODIFIED D-PRJ001-US-001-01: la incidencia es casos / población × 100.000 y la población viene de proyecciones DANE» | registra tu corrección y reanaliza la historia automáticamente |
 | «APPROVED D-PRJ001-US-003-01, migrar por lotes» | aprueba; se escribe la versión `_human_approved` |
 | «¿Por qué US-001 terminó así?» | `explicar_historia`: transiciones, revisiones por agente, HITL, decisiones y auditoría |
+
+**Estimación.** `estimation_agent` clasifica cada historia como HU-IA o HU-Tradicional y puntúa sus factores de 1 a 5; los puntos (Fibonacci), el rango y el spike los calcula el código (`services/estimation.py`), así el modelo no puede inventar un número fuera del método. Es informativa: no baja la confianza ni detiene el flujo; un spike requerido pide revisión (nivel 1). Una persona puede ajustar tipo y factores desde el SPB; su estimación prevalece y queda versionada y auditada. Método y referencias en [docs/metodo_estimacion.md](docs/metodo_estimacion.md) (adoptado de [SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA)).
+
+**Concurrencia.** Cada proyecto tiene su candado: análisis, decisiones, aprobación de épicas y estimaciones de un proyecto no se cruzan, y proyectos distintos avanzan en paralelo. Si llega una decisión mientras corre un análisis, se rechaza con «ocupado» (409) en vez de perderse. Cada historia lleva una `version`; la interfaz la envía con la decisión y, si la historia cambió entretanto, recibe 409 y recarga. El estado guardado también lleva versión: si otro proceso (otro servidor sobre el mismo bucket) lo modificó, el guardado falla y el proyecto queda en `ERROR` con el motivo, en lugar de pisar cambios en silencio.
 
 Con los ejemplos, PRJ001 se detiene en tres historias: **US-001** por preguntas bloqueantes (fórmula de incidencia, fuente poblacional, definición de caso), **US-003** por migración de datos y retiro de un componente, y **US-004** por proponer cambios a una historia ya aprobada. **US-002** queda lista sin intervención. Las decisiones solo se registran si las escribes tú: el modelo no puede aprobar por su cuenta.
 
@@ -136,15 +140,17 @@ Abre http://127.0.0.1:8000/spb. El mismo servidor sigue ofreciendo ADK Web en `/
 
 | Paso | Qué hace | Con qué parte del backend |
 |---|---|---|
-| 1 · Insumos | Elegir o crear proyecto, subir PDF, DOCX, PPTX, XLSX, CSV, TXT/MD y audios MP3/WAV/M4A (hasta 20 MB se transcriben con Gemini y la transcripción se guarda junto al audio) | `POST /api/projects`, `POST /api/projects/{id}/files` |
-| 2 · Comprensión | Avance en vivo: fuentes, documentos normalizados, historias (escritas o generadas por IA) y evaluación multiagente historia por historia | `POST /api/projects/{id}/analyze` (en segundo plano), `GET …/status` |
-| 3 · Refinamiento | Tarjetas por épica con propuesta mejorada, original, evidencia, calidad, nivel HITL, tipo HU-IA (si arquitectura detecta impacto `ai_ml`) y prioridad sugerida. Aprobar, Refinar (los agentes reanalizan con tu indicación), Descartar, Aprobar épica (solo historias sin decisión crítica) y «¿Por qué?» | `GET …/backlog`, `POST …/stories/{sid}/decision`, `POST …/epics/approve`, `GET …/stories/{sid}/explain` |
-| 4 · Validación | Decisiones críticas (nivel 2) con motivo, riesgo, recomendación y preguntas bloqueantes; calidad INVEST; casos de prueba Dado/Cuando/Entonces; preguntas abiertas del proyecto | mismos endpoints |
-| 5 · Backlog | Resumen, orden por dependencias, avance por épica y exportación CSV (`;`, abre en Excel en español) o JSON | `GET …/export?formato=csv|json` |
+| 1 · Insumos | Elegir o crear proyecto, subir PDF, DOCX, PPTX, XLSX, CSV, TXT/MD, modelos de proceso BPMN (se leen con `defusedxml`, sin riesgo de XXE) y audios MP3/WAV/M4A (hasta 20 MB se transcriben con Gemini y la transcripción se guarda junto al audio) | `POST /api/projects`, `POST /api/projects/{id}/files` |
+| 2 · Comprensión | Avance en vivo: fuentes, documentos normalizados, historias (escritas o generadas por IA) y evaluación multiagente historia por historia; al terminar, tokens y costo estimado de la ejecución | `POST /api/projects/{id}/analyze` (en segundo plano), `GET …/status` |
+| 3 · Refinamiento | Tarjetas por épica con propuesta mejorada, original, evidencia, calidad, nivel HITL, tipo HU-IA o HU-Tradicional (del agente de estimación), puntos con su rango y spike, y prioridad sugerida. Aprobar, Refinar (los agentes reanalizan con tu indicación), Descartar, Estimar, Aprobar épica (solo historias sin decisión crítica) y «¿Por qué?» | `GET …/backlog`, `POST …/stories/{sid}/decision`, `POST …/stories/{sid}/estimate`, `POST …/epics/approve`, `GET …/stories/{sid}/explain` |
+| 4 · Validación | Decisiones críticas (nivel 2) con motivo, riesgo, recomendación y preguntas bloqueantes; calidad INVEST; casos de prueba Dado/Cuando/Entonces; estimación por historia con sus factores (ajustable); preguntas abiertas del proyecto | mismos endpoints |
+| 5 · Backlog | Resumen, orden por dependencias, puntos por historia y en total, avance por épica y exportación CSV (`;`, abre en Excel en español; incluye puntos, rango, spike, método y quién estimó) o JSON | `GET …/export?formato=csv|json` |
 
 El botón **Asistente** conversa con `orquestador_hu` usando la API estándar de ADK (`/apps/orquestador_hu/users/{u}/sessions` y `/run_sse`), y muestra cuándo consulta al agente del bucket. Quien decide se registra con el nombre del campo «Decide» (encabezado `X-Usuario`) en la auditoría y en las versiones aprobadas.
 
 **Permisos:** subir documentos o crear proyectos desde la interfaz escribe en el bucket de entrada, así que la cuenta necesita `roles/storage.objectCreator` sobre `gs://adk_ing`. Sin ese permiso la interfaz muestra el error y se puede seguir subiendo con `gcloud storage cp`. Si abres `web/spb/index.html` directamente (sin servidor) funciona en **modo demo** con datos de ejemplo.
+
+**Modo demostración del backend (sin Gemini):** con `HU_MODEL=simulado` y `HU_INPUT_URI=ejemplos/projects`, el servidor recorre el flujo completo con respuestas fijas (las mismas de las pruebas), sin credenciales ni costo. Sirve para mostrar el SPB o probar la interfaz; el chat responde un aviso fijo. Para trabajar con los proyectos reales vuelve a `HU_MODEL=gemini-2.5-flash` y `HU_INPUT_URI=gs://adk_ing/`.
 
 ### ADK Web con el agente del bucket
 
@@ -190,7 +196,7 @@ Subir requiere `roles/storage.objectCreator`; el agente solo necesita lectura.
 pytest -q
 ```
 
-Las pruebas no requieren credenciales (incluidas las de la API del Smart Product Backlog: proyectos, carga y transcripción de audio, análisis en segundo plano, refinamiento, aprobación por épica, decisiones críticas y exportación): usan los documentos de `docs_ejemplo/` y `ejemplos/projects/`, un cliente de GCS falso y modelos simulados que recorren los flujos reales de ADK. Para el orquestador cubren la política HITL, la máquina de estados, el flujo completo de PRJ001 (pausa, APPROVED, REJECTED, MODIFIED con reanálisis), el versionado, la auditoría, el aislamiento entre proyectos, los reintentos, los errores fatales, los límites y la guardia que impide decisiones no humanas. También corren en GitHub Actions en cada push.
+Las pruebas no requieren credenciales (incluidas las de la API del Smart Product Backlog: proyectos, carga y transcripción de audio, análisis en segundo plano, refinamiento, aprobación por épica, decisiones críticas y exportación): usan los documentos de `docs_ejemplo/` y `ejemplos/projects/`, un cliente de GCS falso y modelos simulados que recorren los flujos reales de ADK. Para el orquestador cubren la política HITL, la máquina de estados, el método de estimación y su ajuste humano, la concurrencia (decisiones durante un análisis, aprobación de épicas, proyectos en paralelo, versión de historia y escrituras de otro proceso), el lector BPMN, el costo por ejecución, el modo demostración, el flujo completo de PRJ001 (pausa, APPROVED, REJECTED, MODIFIED con reanálisis), el versionado, la auditoría, el aislamiento entre proyectos, los reintentos, los errores fatales, los límites y la guardia que impide decisiones no humanas. También corren en GitHub Actions en cada push.
 
 ## Variables de entorno
 
@@ -215,9 +221,10 @@ Las pruebas no requieren credenciales (incluidas las de la API del Smart Product
 | `HU_CONTEXTO_GENERACION_MAX_CARACTERES` | `150000` | Texto de los documentos que recibe el generador |
 | `HU_RESULTS_URI` | `salidas_hu` | Resultados, estado y auditoría (carpeta local o `gs://bucket-resultados`) |
 | `HU_STATE_URI` | *(= resultados)* | Destino aparte para el estado, si se quiere |
-| `HU_MODEL` | `ADK_MODEL` | Modelo de los agentes del orquestador |
+| `HU_MODEL` | `ADK_MODEL` | Modelo de los agentes del orquestador; `simulado` = modo demostración sin Gemini |
 | `HU_CONFIDENCE_AUTO` / `HU_CONFIDENCE_REVIEW` | `0.85` / `0.60` | Umbrales HITL de confianza |
 | `HU_MAX_HISTORIAS_POR_EJECUCION` | `10` | Historias analizadas por ejecución |
 | `HU_MAX_REANALISIS` | `2` | Reanálisis permitidos tras MODIFIED |
 | `HU_MAX_REINTENTOS` | `2` | Reintentos ante errores transitorios |
 | `HU_MAX_LLAMADAS_LLM_POR_HISTORIA` | `12` | Límite de llamadas al modelo por historia |
+| `HU_PRECIO_ENTRADA_1M` / `HU_PRECIO_SALIDA_1M` | *(vacío = precio de lista de `gemini-2.5-flash`: 0.30 / 2.50 USD)* | USD por millón de tokens para estimar el costo; los tokens de razonamiento se cuentan como salida. Con otro modelo y sin estas variables no se calcula costo |
