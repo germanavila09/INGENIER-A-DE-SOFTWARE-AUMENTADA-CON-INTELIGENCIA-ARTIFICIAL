@@ -17,7 +17,11 @@ def get_provider() -> AgentProvider:
     if name == "adk":
         from app.agents.providers.adk import AdkProvider
 
-        return AdkProvider(model=settings.agent_model, api_key=settings.google_api_key)
+        return AdkProvider(
+            model=settings.agent_model, api_key=settings.google_api_key,
+            vertexai=settings.google_genai_use_vertexai, project=settings.google_cloud_project,
+            location=settings.google_cloud_location,
+        )
     raise AgentNotConfigured(f"AGENT_PROVIDER desconocido: {settings.agent_provider}")
 
 
@@ -28,4 +32,5 @@ def provider_status() -> dict:
         provider = get_provider()
     except AgentNotConfigured as exc:
         return {**base, "configured": False, "reason": str(exc)}
-    return {**base, "configured": True, "reason": None, "model": provider.model}
+    return {**base, "configured": True, "reason": None, "model": provider.model,
+            "backend": getattr(provider, "backend", None)}

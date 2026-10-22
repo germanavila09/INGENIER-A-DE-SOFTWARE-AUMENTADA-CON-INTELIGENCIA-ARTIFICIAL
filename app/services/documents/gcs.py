@@ -3,6 +3,10 @@
 Misma interfaz que FolderSource (list, resolve, read_bytes, location) y las mismas reglas:
 un proyecto solo ve los archivos directos de su carpeta, sin subcarpetas ni rutas.
 
+Con AGENT_DOCS_MAP, una clave puede apuntar a un prefijo cualquiera del bucket: una carpeta
+(«documentos/») o el comienzo del nombre de archivos sueltos («SERVI _ SINCHI __»). Sirve para
+buckets que ya tienen su propia organización, sin copiar ni mover nada.
+
 Solo lectura. La autenticación usa Application Default Credentials:
     gcloud auth application-default login
 o una cuenta de servicio con GOOGLE_APPLICATION_CREDENTIALS. La identidad necesita
@@ -38,14 +42,23 @@ def _client(project: str | None):
 class GcsSource:
     kind = "gcs"
 
-    def __init__(self, bucket: str, prefix: str | None, project_key: str, client=None, gcp_project: str | None = None):
+    def __init__(self, bucket: str, prefix: str | None, project_key: str, client=None, gcp_project: str | None = None,
+                 mapped_prefix: str | None = None):
         if not bucket:
             raise ServiceUnavailable("Falta AGENT_DOCS_BUCKET para AGENT_DOCS_SOURCE=gcs")
         # La clave ya viene validada; esto es defensa extra para que no salga de su carpeta.
         if not project_key or "/" in project_key or project_key in (".", ".."):
             raise Unprocessable("Clave de proyecto inválida para el bucket de documentos")
         self.bucket_name = bucket
-        self.project_prefix = f"{normalize_prefix(prefix)}{project_key}/"
+        if mapped_prefix:
+            if ".." in mapped_prefix or mapped_prefix.startswith("/"):
+                raise Unprocessable("Prefijo de AGENT_DOCS_MAP inválido")
+            # Carpeta («documentos/») o comienzo del nombre de archivos sueltos («SERVI _ SINCHI __»).
+            self.project_prefix = mapped_prefix
+        else:
+            self.project_prefix = f"{normalize_prefix(prefix)}{project_key}/"
+        # Los nombres que ve el proyecto son relativos a la carpeta que contiene el prefijo.
+        self._base = self.project_prefix[: self.project_prefix.rfind("/") + 1]
         self._client = client or _client(gcp_project)
         self._bucket = self._client.bucket(bucket)
 
@@ -61,7 +74,7 @@ class GcsSource:
             raise ServiceUnavailable(f"No se pudo listar {self.location}: {exc}") from exc
         items = []
         for blob in sorted(blobs, key=lambda b: b.name):
-            name = blob.name[len(self.project_prefix):]
+            name = blob.name[len(self._base):]
             if not name or "/" in name or PurePosixPath(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
                 continue
             items.append(DocumentInfo(name=name, size=blob.size or 0))
@@ -73,8 +86,11 @@ class GcsSource:
             raise Unprocessable("Nombre de archivo inválido (solo el nombre, sin rutas)")
         if PurePosixPath(filename).suffix.lower() not in SUPPORTED_EXTENSIONS:
             raise Unprocessable(f"Formato no soportado: {PurePosixPath(filename).suffix}")
+        object_name = self._base + filename
+        if not object_name.startswith(self.project_prefix):
+            raise NotFound(f"No existe el documento {filename} en {self.location}")
         try:
-            blob = self._bucket.get_blob(self.project_prefix + filename)
+            blob = self._bucket.get_blob(object_name)
         except Exception as exc:  # noqa: BLE001
             raise ServiceUnavailable(f"No se pudo consultar {self.location}{filename}: {exc}") from exc
         if blob is None:

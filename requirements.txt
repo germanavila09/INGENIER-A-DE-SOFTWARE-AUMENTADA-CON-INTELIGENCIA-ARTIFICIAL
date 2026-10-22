@@ -13,6 +13,7 @@ alembic==1.15.2
 markdown-it-py==4.2.0
 defusedxml==0.7.1
 pypdf==6.20.0
+python-docx==1.2.0
 # Agentes: ADK y su cliente de Gemini (pinned a la versión probada)
 google-adk==2.11.0
 google-genai==2.29.0

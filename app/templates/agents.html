@@ -13,7 +13,7 @@
     <div class="card-head"><h2>Estado del proveedor</h2></div>
     {% if status.configured %}
       <span class="badge ok">Configurado</span>
-      <p class="small" style="margin-top:10px">Proveedor <strong>{{ status.provider }}</strong> · modelo <span class="mono">{{ status.model }}</span> · ejecución <span class="mono">{{ status.execution }}</span></p>
+      <p class="small" style="margin-top:10px">Proveedor <strong>{{ status.provider }}</strong> · modelo <span class="mono">{{ status.model }}</span> · ejecución <span class="mono">{{ status.execution }}</span>{% if status.backend %} · <span class="mono">{{ status.backend }}</span>{% endif %}</p>
     {% else %}
       <span class="badge pending">No configurado</span>
       <p class="small muted" style="margin-top:10px">{{ status.reason }}</p>
@@ -28,7 +28,7 @@
       <p class="small" style="color:var(--danger)">{{ docs_error }}</p>
     {% elif documents %}
       <ul class="small" style="margin:0;padding-left:18px">{% for d in documents %}<li>{{ d.name }} <span class="muted">({{ (d.size / 1024)|round(1) }} KB)</span></li>{% endfor %}</ul>
-    {% else %}<p class="muted small">Aún no hay PDF, BPMN, TXT ni MD en {{ 'el bucket' if status.docs_source == 'gcs' else 'la carpeta' }} del proyecto.</p>{% endif %}
+    {% else %}<p class="muted small">Aún no hay PDF, DOCX, BPMN, TXT ni MD en {{ 'el bucket' if status.docs_source == 'gcs' else 'la carpeta' }} del proyecto.</p>{% endif %}
     {% if can_write and documents %}
       <form method="post" action="/p/{{ project.key }}/agents/generate-from-documents" class="stack" style="margin-top:12px">
         <p class="small muted" style="margin:0">El generador consulta al agente de documentos, que lista y lee los archivos de esta fuente y le responde con su contenido.</p>

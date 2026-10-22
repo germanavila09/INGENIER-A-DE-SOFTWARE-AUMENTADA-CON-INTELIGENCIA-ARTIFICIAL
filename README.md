@@ -726,7 +726,48 @@ gs://<AGENT_DOCS_BUCKET>/<AGENT_DOCS_PREFIX>/PAGO/reunion.md
 3. **Sube los documentos:** `gcloud storage cp documents/PAGO/* gs://mi-bucket/spb/PAGO/`.
 4. **Recrea el contenedor** (`docker compose up -d app`) y revisa `GET /api/v1/projects/PAGO/agents/documents`.
 
-Las mismas reglas que la carpeta: solo los archivos directos de `<KEY>/` (las subcarpetas se ignoran), solo nombres sin rutas, 20 MB por archivo, formatos PDF/BPMN/MD/TXT. Un bucket inaccesible responde `503` en la API; las pantallas siguen funcionando y muestran el error. Para volver a la carpeta: `AGENT_DOCS_SOURCE=folder` **y** vacía `AGENT_DOCS_BUCKET`, `AGENT_DOCS_PREFIX` y `GCP_PROJECT`.
+Las mismas reglas que la carpeta: solo los archivos directos de `<KEY>/` (las subcarpetas se ignoran), solo nombres sin rutas, 20 MB por archivo, formatos PDF/DOCX/BPMN/MD/TXT. Un bucket inaccesible responde `503` en la API; las pantallas siguen funcionando y muestran el error. Para volver a la carpeta: `AGENT_DOCS_SOURCE=folder` **y** vacía `AGENT_DOCS_BUCKET`, `AGENT_DOCS_PREFIX` y `GCP_PROJECT`.
+
+#### Bucket con su propia organización (`AGENT_DOCS_MAP`)
+
+Si el bucket ya tiene sus documentos organizados de otra forma, no hace falta copiarlos ni moverlos: `AGENT_DOCS_MAP` asocia una clave de proyecto a un prefijo del bucket, que puede ser una carpeta o el comienzo del nombre de archivos sueltos.
+
+```
+AGENT_DOCS_MAP=SINCHI=SERVI _ SINCHI __;DOCS=documentos/
+```
+
+| Clave | Lee |
+|---|---|
+| `SINCHI` | los archivos de la raíz cuyo nombre empieza por `SERVI _ SINCHI __` (p. ej. las «Notas de Gemini» de Meet en `.docx`) |
+| `DOCS` | los archivos directos de `documentos/` |
+| cualquier otra | `<AGENT_DOCS_PREFIX>/<KEY>/`, como siempre |
+
+Las reglas no cambian: un proyecto solo ve los objetos de su prefijo, sin subcarpetas, y no puede leer los de otro.
+
+#### Gemini en Vertex AI con las credenciales de GCP (sin API key)
+
+En lugar de `GOOGLE_API_KEY`, el proveedor ADK puede usar Vertex AI con Application Default Credentials:
+
+```
+AGENT_PROVIDER=adk
+AGENT_MODEL=gemini-2.5-flash
+GOOGLE_GENAI_USE_VERTEXAI=TRUE
+GOOGLE_CLOUD_PROJECT=mi-proyecto-gcp
+GOOGLE_CLOUD_LOCATION=us-central1
+```
+
+La identidad necesita `roles/aiplatform.user` en el proyecto (y `roles/storage.objectViewer` en el bucket). Sin credenciales, `/p/<KEY>/agents` muestra el proveedor como «no configurado» con el motivo.
+
+Con Docker, `docker-compose.gcp.yml` monta el archivo de `gcloud auth application-default login` en modo lectura y usa su propio nombre de proyecto, para no mezclar la base con otra instalación:
+
+```powershell
+gcloud auth application-default login
+docker compose -p spb-gcp -f docker-compose.yml -f docker-compose.gcp.yml up --build -d
+docker compose -p spb-gcp exec app python scripts/seed.py
+docker compose -p spb-gcp exec app python scripts/probar_gcp.py    # bucket + Gemini, de punta a punta
+```
+
+`scripts/probar_gcp.py` crea los proyectos de `AGENT_DOCS_MAP` que falten, lista sus documentos en el bucket y genera HU con Gemini leyendo esos documentos (quedan en `borrador`). Para parar: `docker compose -p spb-gcp down`.
 
 Subir un archivo (`/generate-stories/upload`) o pegar texto (`document_text`) no son fuentes de documentos: el contenido se procesa en memoria y no se guarda en la carpeta ni en el bucket.
 

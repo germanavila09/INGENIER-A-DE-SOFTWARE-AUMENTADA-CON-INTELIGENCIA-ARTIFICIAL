@@ -146,11 +146,31 @@ class _LlmContextReport(BaseModel):
     summary: str | None = None
 
 
+def _check_adc() -> None:
+    """Vertex AI usa Application Default Credentials: si no hay, el proveedor queda «no configurado»."""
+    try:
+        import google.auth
+
+        google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    except Exception as exc:  # noqa: BLE001 - DefaultCredentialsError u otro problema de credenciales
+        raise AgentNotConfigured(
+            "Sin credenciales de GCP para Vertex AI: ejecuta `gcloud auth application-default login` "
+            f"o define GOOGLE_APPLICATION_CREDENTIALS ({type(exc).__name__})"
+        ) from exc
+
+
 class AdkProvider:
     name = "adk"
 
-    def __init__(self, model: str, api_key: str | None, llm=None):
-        """`llm` permite inyectar un BaseLlm (pruebas sin red). En producción se usa el nombre de Gemini."""
+    def __init__(self, model: str, api_key: str | None, llm=None, vertexai: bool = False,
+                 project: str | None = None, location: str | None = None):
+        """`llm` permite inyectar un BaseLlm (pruebas sin red). En producción se usa el nombre de Gemini.
+
+        Dos formas de llegar a Gemini:
+        - Gemini API (Google AI Studio): `api_key`.
+        - Vertex AI (`vertexai=True`): proyecto y región de GCP, con Application Default Credentials
+          (`gcloud auth application-default login` o una cuenta de servicio). No usa clave.
+        """
         try:
             from google.adk.agents import LlmAgent, SequentialAgent
             from google.adk.apps import App
@@ -161,11 +181,23 @@ class AdkProvider:
             from google.genai import types
         except ImportError as exc:  # pragma: no cover - depende del entorno
             raise AgentNotConfigured("google-adk no está instalado (revisa requirements.txt)") from exc
-        if not api_key:
-            raise AgentNotConfigured("Falta GOOGLE_API_KEY (clave de Gemini API, Google AI Studio o cuenta empresarial)")
         # google-genai lee estas variables del entorno del proceso, no del archivo .env de pydantic.
-        os.environ.setdefault("GOOGLE_API_KEY", api_key)
-        os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "FALSE")
+        if vertexai:
+            if not project:
+                raise AgentNotConfigured("Vertex AI necesita GOOGLE_CLOUD_PROJECT (proyecto de GCP con la API de Vertex AI)")
+            if llm is None:
+                _check_adc()
+            os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
+            os.environ["GOOGLE_CLOUD_PROJECT"] = project
+            os.environ["GOOGLE_CLOUD_LOCATION"] = location or "us-central1"
+            self.backend = f"Vertex AI · {project} · {location or 'us-central1'}"
+        else:
+            if not api_key:
+                raise AgentNotConfigured(
+                    "Falta GOOGLE_API_KEY (Gemini API) o GOOGLE_GENAI_USE_VERTEXAI=TRUE con GOOGLE_CLOUD_PROJECT (Vertex AI)")
+            os.environ.setdefault("GOOGLE_API_KEY", api_key)
+            os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "FALSE")
+            self.backend = "Gemini API"
         self._model_ref = llm if llm is not None else model
         self.model = model if isinstance(model, str) else getattr(model, "model", None)
         self._LlmAgent = LlmAgent
@@ -250,7 +282,7 @@ class AdkProvider:
             model=self._model_ref,
             description=(
                 "Agente de documentos del proyecto: lista y lee los documentos de su carpeta o bucket "
-                "(PDF, BPMN, MD, TXT) y responde con su contenido citando documento y sección. "
+                "(PDF, DOCX, BPMN, MD, TXT) y responde con su contenido citando documento y sección. "
                 "Pídele qué documentos hay o qué dice un documento."
             ),
             instruction=DOCUMENT_AGENT_INSTRUCTION,

@@ -35,13 +35,13 @@ class DocumentTools:
 
     def _text(self, name: str) -> str:
         if name not in self._cache:
-            # Mismo cargador que la generación desde un archivo (PDF, BPMN seguro, MD, TXT).
+            # Mismo cargador que la generación desde un archivo (PDF, DOCX, BPMN seguro, MD, TXT).
             # El límite por documento es el presupuesto total: ningún documento puede superarlo.
             self._cache[name] = load_document_text(name, self.source.read_bytes(name), self.max_total_chars)
         return self._cache[name]
 
     def listar_documentos(self) -> dict:
-        """Lista los documentos del proyecto (PDF, BPMN, MD, TXT) con su tamaño en bytes.
+        """Lista los documentos del proyecto (PDF, DOCX, BPMN, MD, TXT) con su tamaño en bytes.
 
         Returns:
             dict con 'ubicacion' (carpeta o gs://...) y 'documentos' (nombre y tamaño).

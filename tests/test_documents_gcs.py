@@ -52,7 +52,7 @@ class FakeClient:
 
 FILES = {
     "spb/DEMO/reunion.md": b"# Pagos\n## Requisitos\n- El cliente paga con tarjeta de credito\n",
-    "spb/DEMO/notas.docx": b"no soportado",
+    "spb/DEMO/notas.pptx": b"no soportado",
     "spb/DEMO/sub/oculto.md": b"# Sub\n- No debe verse desde DEMO\n",
     "spb/DEMO/": b"",  # marcador de carpeta creado desde la consola
     "spb/OTRO/secreto.md": b"# Otro\n- Documento de otro proyecto\n",
@@ -87,7 +87,7 @@ def test_paths_are_rejected(name):
 
 def test_unsupported_missing_and_oversized_files():
     with pytest.raises(Unprocessable, match="Formato"):
-        source().read_bytes("notas.docx")
+        source().read_bytes("notas.pptx")
     with pytest.raises(NotFound):
         source().read_bytes("secreto.md")  # existe, pero en OTRO
     big = {"spb/DEMO/grande.pdf": FakeBlob("spb/DEMO/grande.pdf", b"x", size=MAX_FILE_BYTES + 1)}

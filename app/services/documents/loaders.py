@@ -1,4 +1,4 @@
-"""Convierte documentos (TXT, MD, PDF, BPMN) a texto plano/markdown para el agente.
+"""Convierte documentos (TXT, MD, PDF, DOCX, BPMN) a texto plano/markdown para el agente.
 
 Cada formato tiene su cargador. El BPMN se parsea con defusedxml, que rechaza DTD y
 entidades externas (XXE, "billion laughs"). Nunca se usa xml.etree directamente.
@@ -17,7 +17,7 @@ from pypdf.errors import PdfReadError
 
 from app.services.errors import PayloadTooLarge, Unprocessable
 
-SUPPORTED_EXTENSIONS = (".txt", ".md", ".pdf", ".bpmn")
+SUPPORTED_EXTENSIONS = (".txt", ".md", ".pdf", ".docx", ".bpmn")
 
 
 def _load_text(data: bytes) -> str:
@@ -40,6 +40,39 @@ def _load_pdf(data: bytes) -> str:
     if not pages:
         raise Unprocessable("El PDF no tiene texto extraíble (¿es un escaneo? Requiere OCR)")
     return "\n\n".join(pages)
+
+
+def _load_docx(data: bytes) -> str:
+    """Word (p. ej. las «Notas de Gemini» de Meet): títulos como markdown, viñetas y tablas.
+
+    python-docx parsea el XML del paquete sin resolver entidades externas.
+    """
+    try:
+        from docx import Document
+    except ImportError as exc:  # pragma: no cover - depende del entorno
+        raise Unprocessable("python-docx no está instalado (revisa requirements.txt)") from exc
+    try:
+        doc = Document(io.BytesIO(data))
+    except Exception as exc:  # noqa: BLE001 - zip o XML inválido
+        raise Unprocessable(f"DOCX inválido: {type(exc).__name__}") from exc
+    lines: list[str] = []
+    for par in doc.paragraphs:
+        text = par.text.strip()
+        if not text:
+            continue
+        style = (par.style.name or "").lower() if par.style is not None else ""
+        if style.startswith(("heading", "título", "titulo")):
+            level = next((int(c) for c in style if c.isdigit()), 1)
+            lines.append(f"{'#' * min(level + 1, 6)} {text}")
+        elif "list" in style or "lista" in style:
+            lines.append(f"- {text}")
+        else:
+            lines.append(text)
+    for number, table in enumerate(doc.tables, start=1):
+        lines.append(f"\n## Tabla {number}")
+        for row in table.rows:
+            lines.append("| " + " | ".join(cell.text.strip().replace("\n", " ") for cell in row.cells) + " |")
+    return "\n".join(lines)
 
 
 def _local(tag: str) -> str:
@@ -105,6 +138,7 @@ _LOADERS: dict[str, Callable[[bytes], str]] = {
     ".txt": _load_text,
     ".md": _load_text,
     ".pdf": _load_pdf,
+    ".docx": _load_docx,
     ".bpmn": _load_bpmn,
 }
 

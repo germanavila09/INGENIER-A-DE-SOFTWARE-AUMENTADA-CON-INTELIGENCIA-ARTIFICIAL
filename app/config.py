@@ -24,7 +24,17 @@ class Settings(BaseSettings):
     agent_docs_bucket: str | None = None  # solo gcs
     agent_docs_prefix: str = ""  # solo gcs
     gcp_project: str | None = None  # solo gcs
+    # Proyecto SPB → prefijo del bucket, para buckets que ya tienen su propia organización.
+    # "SINCHI=SERVI _ SINCHI __;DOCS=documentos/": la clave SINCHI lee los objetos cuyo nombre empieza
+    # por "SERVI _ SINCHI __" y DOCS los de la carpeta documentos/. Las claves sin entrada usan
+    # AGENT_DOCS_PREFIX/<KEY>/ como siempre. Solo gcs.
+    agent_docs_map: str = ""
     google_api_key: str | None = None
+    # Gemini en Vertex AI con Application Default Credentials (en lugar de GOOGLE_API_KEY).
+    # Mismas variables que lee google-genai: GOOGLE_GENAI_USE_VERTEXAI, GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION.
+    google_genai_use_vertexai: bool = False
+    google_cloud_project: str | None = None
+    google_cloud_location: str = "us-central1"
     agent_price_in_per_1m: float | None = None
     agent_price_out_per_1m: float | None = None
 
@@ -36,7 +46,8 @@ class Settings(BaseSettings):
 
     # Una variable vacía en .env (p. ej. AGENT_PRICE_IN_PER_1M=) significa «sin definir», no "".
     @field_validator(
-        "agent_docs_bucket", "gcp_project", "agent_price_in_per_1m", "agent_price_out_per_1m", mode="before"
+        "agent_docs_bucket", "gcp_project", "agent_price_in_per_1m", "agent_price_out_per_1m", "google_cloud_project",
+        mode="before"
     )
     @classmethod
     def _blank_is_none(cls, value):
@@ -52,12 +63,28 @@ class Settings(BaseSettings):
                 ("AGENT_DOCS_BUCKET", self.agent_docs_bucket),
                 ("AGENT_DOCS_PREFIX", self.agent_docs_prefix.strip()),
                 ("GCP_PROJECT", self.gcp_project),
+                ("AGENT_DOCS_MAP", self.agent_docs_map.strip()),
             ) if value]
             if mixed:
                 raise ValueError(
                     f"AGENT_DOCS_SOURCE=folder no usa {', '.join(mixed)}: vacíalas, o usa AGENT_DOCS_SOURCE=gcs"
                 )
+        self.docs_map  # valida el formato de AGENT_DOCS_MAP al arrancar
         return self
+
+    @property
+    def docs_map(self) -> dict[str, str]:
+        """AGENT_DOCS_MAP como {CLAVE: prefijo}. Formato: CLAVE=prefijo separados por ';'."""
+        out: dict[str, str] = {}
+        for item in self.agent_docs_map.split(";"):
+            if not item.strip():
+                continue
+            key, sep, prefix = item.partition("=")
+            key = key.strip().upper()
+            if not sep or not key or not prefix.strip() or ".." in prefix:
+                raise ValueError(f"AGENT_DOCS_MAP inválido en {item.strip()!r}: usa CLAVE=prefijo;OTRA=carpeta/")
+            out[key] = prefix.strip().lstrip("/")
+        return out
 
     @property
     def agent_docs_dir_path(self) -> Path:

@@ -20,6 +20,7 @@ def get_document_source(project_key: str, client=None) -> DocumentSource:
         return GcsSource(
             settings.agent_docs_bucket or "", settings.agent_docs_prefix, project_key,
             client=client, gcp_project=settings.gcp_project,
+            mapped_prefix=settings.docs_map.get(project_key.upper()),
         )
     raise ServiceUnavailable(f"AGENT_DOCS_SOURCE desconocido: {settings.agent_docs_source} (usa folder o gcs)")
 
