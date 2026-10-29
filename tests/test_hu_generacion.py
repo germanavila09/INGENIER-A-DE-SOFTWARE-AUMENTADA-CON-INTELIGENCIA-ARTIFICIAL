@@ -74,12 +74,12 @@ def test_genera_historias_desde_notas_y_las_evalua(bucket):
     assert "dengue" not in gen_calls[0]["instruction"].lower()                 # solo documentos de SINCHI
 
     base = out / "projects" / "SERVI_SINCHI" / "generated"
-    gen = json.loads((base / "story_generation.json").read_text())
+    gen = json.loads((base / "story_generation.json").read_text(encoding="utf-8"))
     assert gen["stories"][0]["origin"] == "generated" and gen["stories"][0]["evidence"]
     assert (base / "user_stories" / "HU-IA-001" / "versions" / "HU-IA-001_v1_ai_generated.json").exists()
-    hitl = json.loads((base / "user_stories" / "HU-IA-001" / "hitl.json").read_text())
+    hitl = json.loads((base / "user_stories" / "HU-IA-001" / "hitl.json").read_text(encoding="utf-8"))
     assert any(x["code"] == "GENERATED_STORY" for x in hitl["reasons"])
-    assert "*(IA)*" in (base / "reports" / "project_report.md").read_text()
+    assert "*(IA)*" in (base / "reports" / "project_report.md").read_text(encoding="utf-8")
     estado = {h["story_id"]: h for h in eng.project_status("SERVI_SINCHI")["historias"]}
     assert estado["HU-IA-001"]["origen"] == "generated"
 

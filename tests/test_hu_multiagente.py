@@ -152,13 +152,13 @@ def test_flujo_completo_con_hitl_y_reanudacion(entorno):
               "hitl.json", "proposed.json", "hitl_request.json"]:
         assert (us1 / f).exists(), f
     assert sorted(p.name for p in (us1 / "versions").iterdir()) == ["US-001_v1_original.json", "US-001_v2_agent_proposal.json"]
-    analysis = json.loads((us1 / "analysis.json").read_text())
+    analysis = json.loads((us1 / "analysis.json").read_text(encoding="utf-8"))
     assert analysis["agent_response"]["agent"] == "story_analyst_agent"
     assert analysis["agent_response"]["status"] == AgentStatus.NEEDS_CHANGES.value
     assert analysis["agent_response"]["metadata"]["quality_score"] == pytest.approx(70.0)
 
     # ---------------- auditoría y estado persistido (otra instancia lo lee igual)
-    audit = [json.loads(l) for l in (resultados / "projects/PRJ001/audit/audit_log.jsonl").read_text().splitlines()]
+    audit = [json.loads(l) for l in (resultados / "projects/PRJ001/audit/audit_log.jsonl").read_text(encoding="utf-8").splitlines()]
     eventos = {e["event"] for e in audit}
     assert {"run_started", "agent_output", "proposal", "hitl_request", "run_finished"} <= eventos
     salida_analista = [e for e in audit if e["event"] == "agent_output" and e.get("agent") == "story_analyst_agent"]
@@ -211,7 +211,7 @@ def test_flujo_completo_con_hitl_y_reanudacion(entorno):
 
     # ---------------- cambio en la fuente: solo se reanaliza la historia que cambió
     backlog = entrada / "proyecto_001" / "user_stories" / "backlog.md"
-    backlog.write_text(backlog.read_text().replace("comité de vigilancia", "comité departamental"), encoding="utf-8")
+    backlog.write_text(backlog.read_text(encoding="utf-8").replace("comité de vigilancia", "comité departamental"), encoding="utf-8")
     r = run(eng2.analyze_project("PRJ001"))
     assert r["procesadas"] == ["US-002"]
 
