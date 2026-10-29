@@ -190,6 +190,15 @@ Subir requiere `roles/storage.objectCreator`; el agente solo necesita lectura.
 
 > **Repo dentro de Google Drive:** crea el entorno virtual fuera de la carpeta sincronizada (o usa el Python global) y pon `ADK_SESSION_URI=memory://` en el `.env`, para que Drive no intente sincronizar miles de archivos ni la base SQLite de sesiones.
 
+## Integración con SmartBacklogIA
+
+`python adk_web.py` abre **Ruta de historias** (`/flujo`): una sola interfaz para documentos, análisis
+multiagente, revisión humana, estimación, priorización y publicación en
+[SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA), cuyas cinco etapas se consultan desde
+ahí y se aprueban allá. Las historias aprobadas se publican con su estimación, tipo y orden; lo editado en
+SmartBacklogIA no se pisa. Configura `SBIA_URL`, `SBIA_API_KEY` y `SBIA_CLAVES` en `.env`.
+Detalle en [docs/integracion_smartbacklog.md](docs/integracion_smartbacklog.md).
+
 ## Pruebas
 
 ```bash

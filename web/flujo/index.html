@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ruta de historias</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Source+Serif+4:opsz,wght@8..60,400..600&display=swap" rel="stylesheet">
+<style>
+/* Carta topográfica: papel, tinta, agua (lo nuestro), ciruela (SmartBacklogIA), bosque (hecho), ocre (te toca). */
+:root {
+  --papel: #E9ECE4; --papel-2: #F4F6F0; --tinta: #1F2A26; --tinta-2: #55615A; --linea: #C3CABD;
+  --agua: #2A6A8C; --agua-suave: #D3E2E8; --ciruela: #6B4C7E; --ciruela-suave: #E4DCE9;
+  --bosque: #3F7A48; --bosque-suave: #D9E7D7; --ocre: #A97A1F; --ocre-suave: #F1E5C7;
+  --rojo: #A6392F; --rojo-suave: #F2D9D5;
+  --ui: "Archivo", system-ui, sans-serif; --texto: "Source Serif 4", Georgia, serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --papel: #161E1B; --papel-2: #1D2723; --tinta: #E2E7DF; --tinta-2: #9CA79F; --linea: #36433D;
+    --agua: #6FAECF; --agua-suave: #1F3640; --ciruela: #B793CB; --ciruela-suave: #2F2536;
+    --bosque: #79B57F; --bosque-suave: #1F3323; --ocre: #DDAE52; --ocre-suave: #3A2F17;
+    --rojo: #E07B70; --rojo-suave: #3D2220; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --papel: #161E1B; --papel-2: #1D2723; --tinta: #E2E7DF; --tinta-2: #9CA79F; --linea: #36433D;
+  --agua: #6FAECF; --agua-suave: #1F3640; --ciruela: #B793CB; --ciruela-suave: #2F2536;
+  --bosque: #79B57F; --bosque-suave: #1F3323; --ocre: #DDAE52; --ocre-suave: #3A2F17;
+  --rojo: #E07B70; --rojo-suave: #3D2220; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--papel); color: var(--tinta); font: 400 15px/1.5 var(--ui); font-variation-settings: "wdth" 100; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--agua); }
+:focus-visible { outline: 2px solid var(--agua); outline-offset: 2px; }
+code { font: 600 0.9em var(--ui); color: var(--tinta-2); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ---------- cabecera */
+header { display: flex; align-items: center; gap: 20px; padding: 14px 28px; border-bottom: 1px solid var(--linea); flex-wrap: wrap; }
+.marca { font-weight: 800; font-size: 19px; font-variation-settings: "wdth" 125; letter-spacing: -0.01em; margin-right: auto; }
+.marca small { display: block; font-weight: 400; font-size: 12.5px; color: var(--tinta-2); font-variation-settings: "wdth" 100; letter-spacing: 0; }
+.campo { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta-2); }
+.campo select, .campo input { background: var(--papel-2); border: 1px solid var(--linea); border-radius: 4px; padding: 6px 9px; color: var(--tinta); min-width: 0; }
+.campo input { width: 150px; }
+.icono { background: none; border: 1px solid var(--linea); border-radius: 4px; padding: 6px 10px; cursor: pointer; color: var(--tinta-2); font-size: 13px; }
+
+/* ---------- distribución */
+.mapa { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: calc(100vh - 66px); }
+nav.ruta { border-right: 1px solid var(--linea); padding: 28px 0 40px 28px; position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; }
+main { padding: 34px 44px 80px; max-width: 1100px; }
+
+/* ---------- la ruta (líneas y estaciones) */
+.linea { list-style: none; margin: 0; padding: 0; position: relative; --c: var(--agua); }
+.linea.sbia { --c: var(--ciruela); margin-top: 4px; }
+.linea li { position: relative; padding-left: 38px; }
+.linea li::before { content: ""; position: absolute; left: 11px; top: 0; bottom: 0; width: 6px; background: var(--c); }
+.linea li:first-child::before { top: 18px; }
+.linea li:last-child::before { bottom: calc(100% - 18px); }
+.linea.sbia li:first-child::before { top: 0; }
+.estacion { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 8px 18px 8px 0; cursor: pointer; border-radius: 0; }
+.estacion .punto { position: absolute; left: 4px; top: 10px; width: 20px; height: 20px; border-radius: 50%; background: var(--papel); border: 4px solid var(--c); }
+.estacion b { display: block; font-weight: 650; font-size: 15px; }
+.estacion span { display: block; font-size: 12.5px; color: var(--tinta-2); line-height: 1.35; }
+.estacion:hover b { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.estacion.hecha .punto { background: var(--bosque); border-color: var(--bosque); }
+.estacion.humano .punto { background: var(--ocre); border-color: var(--ocre); }
+.estacion.humano span { color: var(--ocre); font-weight: 600; }
+.estacion.error .punto { background: var(--rojo); border-color: var(--rojo); }
+.estacion.curso .punto { animation: latido 1.4s ease-in-out infinite; }
+.estacion[aria-current="page"] b { font-variation-settings: "wdth" 118; font-weight: 750; }
+.estacion[aria-current="page"]::after { content: ""; position: absolute; right: 0; top: 8px; bottom: 8px; width: 3px; background: var(--tinta); }
+.linea.sbia .estacion { padding-top: 5px; padding-bottom: 5px; }
+.linea.sbia .estacion .punto { width: 16px; height: 16px; left: 6px; top: 8px; border-width: 3px; }
+.linea.sbia .estacion b { font-size: 13.5px; font-weight: 550; }
+/* transbordo: la estación de publicación une las dos líneas */
+.transbordo .punto { width: 28px !important; height: 28px !important; left: 0 !important; top: 6px !important; border: 4px solid var(--tinta) !important; background: var(--papel) !important; box-shadow: inset 0 0 0 4px var(--papel), inset 0 0 0 10px var(--c); }
+.transbordo.hecha .punto { box-shadow: inset 0 0 0 4px var(--papel), inset 0 0 0 10px var(--bosque); }
+.transbordo.humano .punto { box-shadow: inset 0 0 0 4px var(--papel), inset 0 0 0 10px var(--ocre); }
+.rotulo { padding: 14px 18px 6px 38px; font-size: 12.5px; color: var(--ciruela); font-weight: 650; position: relative; }
+.rotulo::before { content: ""; position: absolute; left: 11px; top: 0; bottom: 0; width: 6px; background: repeating-linear-gradient(var(--ciruela) 0 4px, transparent 4px 8px); }
+.leyenda { margin: 26px 18px 0 0; padding-top: 14px; border-top: 1px solid var(--linea); font-size: 12px; color: var(--tinta-2); display: grid; gap: 5px; }
+.leyenda i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; vertical-align: -1px; border: 2px solid var(--agua); }
+@keyframes latido { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--c) 25%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .estacion.curso .punto { animation: none; } }
+
+/* ---------- contenido */
+h1 { font-size: 34px; line-height: 1.1; font-weight: 750; font-variation-settings: "wdth" 115; letter-spacing: -0.015em; margin: 0 0 8px; }
+.bajada { color: var(--tinta-2); margin: 0 0 26px; max-width: 68ch; }
+h2 { font-size: 18px; font-weight: 700; margin: 34px 0 12px; font-variation-settings: "wdth" 108; }
+p { max-width: 72ch; }
+.muted { color: var(--tinta-2); }
+.small { font-size: 13px; }
+.fila-acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
+.btn { border: 1px solid var(--agua); background: var(--agua); color: var(--papel-2); padding: 8px 15px; border-radius: 4px; font-weight: 600; cursor: pointer; }
+.btn.sec { background: transparent; color: var(--agua); }
+.btn.ok { background: var(--bosque); border-color: var(--bosque); }
+.btn.alerta { background: transparent; color: var(--rojo); border-color: var(--rojo); }
+.btn.ciruela { background: var(--ciruela); border-color: var(--ciruela); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.check { display: inline-flex; gap: 7px; align-items: center; font-size: 13.5px; cursor: pointer; }
+.aviso { border-left: 4px solid var(--ocre); background: var(--ocre-suave); padding: 10px 14px; margin: 14px 0; max-width: 78ch; }
+.aviso.error { border-color: var(--rojo); background: var(--rojo-suave); }
+.aviso.bien { border-color: var(--bosque); background: var(--bosque-suave); }
+.vacio { padding: 26px 0; color: var(--tinta-2); max-width: 60ch; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 600; color: var(--tinta-2); font-size: 12.5px; padding: 8px 10px; border-bottom: 2px solid var(--tinta); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tabla { overflow-x: auto; }
+
+/* cifras del resumen: una fila, no tarjetas */
+.cifras { display: flex; flex-wrap: wrap; gap: 0; border-top: 2px solid var(--tinta); border-bottom: 1px solid var(--linea); margin: 0 0 24px; }
+.cifras div { padding: 12px 26px 12px 0; margin-right: 26px; }
+.cifras b { display: block; font-size: 28px; font-weight: 700; font-variation-settings: "wdth" 80; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.cifras span { font-size: 12.5px; color: var(--tinta-2); }
+
+/* estado como en una leyenda de mapa */
+.marca-estado { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.marca-estado::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--tinta-2); }
+.e-aprobada::before, .e-crear::before, .e-approved::before { background: var(--bosque); }
+.e-decision::before, .e-revisar::before, .e-actualizar::before { background: var(--ocre); }
+.e-descartada::before, .e-error::before { background: var(--rojo); }
+.e-lista::before { background: var(--agua); }
+
+/* historias */
+.filtros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+.filtro { border: 1px solid var(--linea); background: transparent; padding: 5px 11px; border-radius: 20px; cursor: pointer; font-size: 13px; }
+.filtro[aria-pressed="true"] { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+.epica { margin: 28px 0 6px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-bottom: 2px solid var(--tinta); padding-bottom: 6px; }
+.epica h2 { margin: 0; }
+.historia { border-bottom: 1px solid var(--linea); padding: 18px 0 18px 18px; position: relative; }
+.historia::before { content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 4px; background: var(--linea); }
+.historia.s-decision::before, .historia.s-revisar::before { background: var(--ocre); }
+.historia.s-aprobada::before { background: var(--bosque); }
+.historia.s-descartada { opacity: .6; } .historia.s-descartada::before, .historia.s-error::before { background: var(--rojo); }
+.historia.s-lista::before { background: var(--agua); }
+.h-cab { display: flex; gap: 12px; justify-content: space-between; align-items: baseline; flex-wrap: wrap; }
+.h-cab h3 { margin: 0; font-size: 16.5px; font-weight: 650; }
+.h-cab code { font: 600 12.5px var(--ui); color: var(--tinta-2); margin-right: 6px; }
+.narrativa { font-family: var(--texto); font-size: 16.5px; line-height: 1.6; margin: 8px 0; max-width: 66ch; }
+.criterios { font-family: var(--texto); margin: 6px 0 10px; padding-left: 20px; max-width: 66ch; font-size: 15px; }
+.criterios li { margin: 2px 0; }
+.datos { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--tinta-2); }
+.datos b { color: var(--tinta); font-weight: 600; }
+.pide { background: var(--ocre-suave); border-left: 4px solid var(--ocre); padding: 10px 14px; margin: 12px 0; max-width: 72ch; font-size: 14px; }
+.pide ul { margin: 4px 0 0; padding-left: 18px; }
+.acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.acciones .btn { padding: 6px 12px; font-size: 13.5px; }
+.refinar { display: none; margin-top: 10px; max-width: 72ch; }
+.refinar.abierto { display: block; }
+textarea { width: 100%; background: var(--papel-2); border: 1px solid var(--linea); border-radius: 4px; padding: 8px 10px; resize: vertical; }
+
+/* documentos */
+.soltar { border: 2px dashed var(--linea); padding: 22px; text-align: center; color: var(--tinta-2); cursor: pointer; max-width: 640px; }
+.soltar.sobre { border-color: var(--agua); color: var(--agua); background: var(--agua-suave); }
+
+/* avance del análisis: es una secuencia */
+.tramos { list-style: none; padding: 0; margin: 10px 0 0; counter-reset: t; max-width: 640px; }
+.tramos li { counter-increment: t; display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--linea); align-items: baseline; }
+.tramos li::before { content: counter(t); font-weight: 700; color: var(--tinta-2); font-variation-settings: "wdth" 80; font-size: 18px; }
+.tramos li.hecho::before { color: var(--bosque); } .tramos li.ahora::before { color: var(--agua); }
+.tramos small { color: var(--tinta-2); display: block; }
+.barra { height: 6px; background: var(--linea); margin-top: 6px; } .barra i { display: block; height: 100%; background: var(--agua); }
+
+/* diálogo de estimación */
+dialog { border: 1px solid var(--linea); background: var(--papel-2); color: var(--tinta); border-radius: 6px; padding: 24px 26px; width: min(560px, calc(100vw - 32px)); }
+dialog::backdrop { background: color-mix(in srgb, var(--tinta) 40%, transparent); }
+dialog h2 { margin-top: 0; }
+.factor { display: grid; grid-template-columns: 1fr 70px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linea); }
+.factor small { display: block; color: var(--tinta-2); font-size: 12.5px; }
+.factor select, dialog select { background: var(--papel); border: 1px solid var(--linea); border-radius: 4px; padding: 5px 8px; }
+
+#aviso-global { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--tinta); color: var(--papel); padding: 10px 18px; border-radius: 4px; font-size: 14px; max-width: calc(100vw - 32px); opacity: 0; pointer-events: none; transition: opacity .2s; }
+#aviso-global.ver { opacity: 1; }
+#aviso-global.error { background: var(--rojo); }
+
+/* ---------- móvil: la ruta pasa arriba y se desliza */
+@media (max-width: 860px) {
+  header { padding: 12px 16px; gap: 10px; }
+  .campo { flex: 1 1 140px; min-width: 0; }
+  .campo select, .campo input { width: 100%; }
+  .marca { flex-basis: 100%; }
+  .mapa { grid-template-columns: 1fr; }
+  nav.ruta { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--linea); padding: 14px 16px; overflow-x: auto; }
+  .ruta-dentro { display: flex; gap: 0; width: max-content; align-items: flex-start; }
+  .linea { display: flex; }
+  .linea li { padding: 26px 0 0; width: 118px; }
+  .linea li::before { left: 0; right: 0; top: 8px; bottom: auto; width: auto; height: 5px; }
+  .linea li:first-child::before { left: 10px; top: 8px; } .linea li:last-child::before { right: calc(100% - 10px); bottom: auto; }
+  .linea.sbia li:first-child::before { left: 0; }
+  .estacion { padding: 0 8px 0 0; }
+  .estacion .punto { left: 0 !important; top: 0 !important; }
+  .linea.sbia .estacion .punto { top: 2px !important; }
+  .transbordo .punto { top: -4px !important; }
+  .estacion[aria-current="page"]::after { left: 0; right: 12px; top: auto; bottom: -6px; width: auto; height: 3px; }
+  .rotulo, .leyenda { display: none; }
+  .linea.sbia { margin: 0; }
+  main { padding: 24px 16px 60px; }
+  h1 { font-size: 27px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="marca">Ruta de historias<small>De los documentos del bucket al backlog de SmartBacklogIA</small></div>
+  <label class="campo">Proyecto <select id="proyecto" aria-label="Proyecto"></select></label>
+  <label class="campo">Decide <input id="usuario" placeholder="Tu nombre" autocomplete="name"></label>
+  <button class="icono" id="tema" type="button" aria-label="Cambiar tema">Tema</button>
+</header>
+
+<div class="mapa">
+  <nav class="ruta" aria-label="Etapas">
+    <div class="ruta-dentro">
+      <ol class="linea" id="linea-propia"></ol>
+      <div class="rotulo">Continúa en SmartBacklogIA</div>
+      <ol class="linea sbia" id="linea-sbia"></ol>
+    </div>
+    <div class="leyenda" aria-hidden="true">
+      <div><i style="background:var(--bosque);border-color:var(--bosque)"></i>Hecho</div>
+      <div><i style="background:var(--ocre);border-color:var(--ocre)"></i>Necesita una persona</div>
+      <div><i></i>Pendiente</div>
+      <div><i style="border-color:var(--ciruela)"></i>Etapas de SmartBacklogIA (se aprueban allá)</div>
+    </div>
+  </nav>
+  <main id="vista" tabindex="-1"></main>
+</div>
+
+<dialog id="dlg-estimar" aria-labelledby="dlg-titulo">
+  <form method="dialog" id="form-estimar">
+    <h2 id="dlg-titulo">Ajustar estimación</h2>
+    <p class="small muted" id="dlg-ayuda"></p>
+    <label class="campo" style="margin:8px 0 6px">Tipo
+      <select id="dlg-tipo"><option value="HU_IA">HU-IA</option><option value="HU_TRADICIONAL">HU-Tradicional</option></select></label>
+    <div id="dlg-factores"></div>
+    <label class="small muted" for="dlg-coment" style="display:block;margin-top:12px">Por qué la ajustas</label>
+    <textarea id="dlg-coment" rows="2" maxlength="1000"></textarea>
+    <div class="fila-acciones" style="justify-content:flex-end">
+      <button class="btn sec" value="cancelar" type="submit">Cancelar</button>
+      <button class="btn" value="guardar" type="submit" id="dlg-guardar">Guardar estimación</button>
+    </div>
+  </form>
+</dialog>
+<div id="aviso-global" role="status" aria-live="polite"></div>
+
+<script>
+const API = '/api';
+const FACTORES = {
+  HU_TRADICIONAL: [['complejidad', 'Complejidad', '1 trivial, 5 muy complejo'], ['esfuerzo', 'Esfuerzo', '1 horas, 5 semanas'],
+    ['incertidumbre', 'Incertidumbre', '1 criterios cerrados, 5 ambiguo']],
+  HU_IA: [['datos', 'Datos', '1 listos, 5 no existen'], ['modelo', 'Modelo', '1 simple, 5 multimodal o razonamiento largo'],
+    ['evaluacion', 'Evaluación', '1 directa, 5 evaluación humana extensa'], ['riesgo', 'Riesgo', '1 bajo, 5 alto'],
+    ['integracion', 'Integración', '1 mínimo, 5 mucho trabajo alrededor del modelo']],
+};
+const ETAPAS = [
+  {id: 'documentos', nombre: 'Documentos'}, {id: 'analisis', nombre: 'Análisis multiagente'},
+  {id: 'revision', nombre: 'Revisión humana'}, {id: 'estimacion', nombre: 'Estimación'},
+  {id: 'priorizacion', nombre: 'Priorización'}, {id: 'publicacion', nombre: 'Publicación', transbordo: true},
+];
+const ESTADOS = {decision: 'Requiere decisión', revisar: 'Revisar', lista: 'Lista', aprobada: 'Aprobada',
+  descartada: 'Descartada', analizando: 'Analizando', pendiente: 'Sin analizar', error: 'Error'};
+const CATEGORIAS = {project_file: 'Proyecto', readme: 'Descripción', requirements: 'Requisitos', user_stories: 'Historias',
+  epics: 'Épicas', acceptance_criteria: 'Criterios', functional: 'Funcional', technical: 'Técnico', architecture: 'Arquitectura',
+  backlog: 'Backlog', decisions: 'Actas y decisiones', dependencies: 'Dependencias', tests: 'Pruebas', other: 'Otro'};
+const TRAMOS = [['fuentes', 'Leer los documentos', 'Texto de PDF, Word, PowerPoint, Excel, BPMN y transcripciones'],
+  ['historias', 'Encontrar o proponer historias', 'Si no hay historias escritas, el generador las propone con evidencia'],
+  ['evaluacion', 'Evaluar cada historia', 'Analista, y en paralelo arquitectura, QA y estimación; luego el agregador y el evaluador HITL']];
+
+const S = {pid: null, vista: 'documentos', proyectos: [], archivos: [], backlog: null, estado: null, sbiaCfg: null,
+  sbia: null, sbiaError: '', plan: null, filtro: 'pendientes', opciones: {actualizar: false, incluir_sin_aprobar: false}, sondeo: null};
+
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const pct = v => v == null ? '—' : Math.round(v * 100) + ' %';
+const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
+function guardar(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+function avisar(msg, error = false) {
+  const t = $('#aviso-global'); t.textContent = msg; t.className = 'ver' + (error ? ' error' : '');
+  clearTimeout(avisar.t); avisar.t = setTimeout(() => { t.className = ''; }, error ? 6000 : 2800);
+}
+function tamano(b) { if (!b) return '0 KB'; const u = ['B', 'KB', 'MB', 'GB']; const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), 3); return (b / 1024 ** i).toFixed(i ? 1 : 0) + ' ' + u[i]; }
+
+async function pedir(ruta, {metodo = 'GET', json, form} = {}) {
+  const headers = {'X-Usuario': encodeURIComponent($('#usuario').value.trim() || 'usuario')};
+  let body;
+  if (json !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(json); }
+  if (form) body = form;
+  const r = await fetch(API + ruta, {method: metodo, headers, body});
+  const datos = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(datos.detail || `Error ${r.status}`), {status: r.status});
+  return datos;
+}
+
+// ------------------------------------------------------------------ carga
+async function cargarProyectos() {
+  const d = await pedir('/projects');
+  S.proyectos = d.proyectos;
+  const sel = $('#proyecto');
+  sel.innerHTML = S.proyectos.map(p => `<option value="${esc(p.project_id)}">${esc(p.project_name || p.project_id)}</option>`).join('');
+  const previo = guardar('ruta.pid');
+  S.pid = S.proyectos.some(p => p.project_id === previo) ? previo : (S.proyectos[0] || {}).project_id || null;
+  if (S.pid) sel.value = S.pid;
+}
+async function cargarTodo() {
+  if (!S.pid) { pintar(); return; }
+  const pid = S.pid;
+  const [arch, est, bl] = await Promise.allSettled([pedir(`/projects/${pid}/files`), pedir(`/projects/${pid}/status`),
+    pedir(`/projects/${pid}/backlog`)]);
+  if (pid !== S.pid) return;
+  S.archivos = arch.status === 'fulfilled' ? arch.value.archivos : [];
+  S.estado = est.status === 'fulfilled' ? est.value : null;
+  S.backlog = bl.status === 'fulfilled' ? bl.value : null;
+  pintar();
+  vigilar();
+  cargarSbia();
+}
+async function cargarSbia() {
+  try { S.sbiaCfg = await pedir('/integracion/smartbacklog'); } catch (e) { S.sbiaCfg = {configurado: false, error: e.message}; }
+  S.sbia = null; S.sbiaError = '';
+  if (S.sbiaCfg.conectado && S.pid) {
+    try { S.sbia = await pedir(`/projects/${S.pid}/smartbacklog`); } catch (e) { S.sbiaError = e.message; }
+  }
+  pintar();
+}
+function enCurso() { return S.estado && S.estado.trabajo && S.estado.trabajo.estado === 'en_curso'; }
+function vigilar() {
+  clearTimeout(S.sondeo);
+  if (!enCurso()) return;
+  S.sondeo = setTimeout(async () => {
+    const antes = enCurso();
+    try { S.estado = await pedir(`/projects/${S.pid}/status`); } catch (e) { /* reintenta */ }
+    if (antes && !enCurso()) {
+      const t = S.estado.trabajo;
+      avisar(t.estado === 'error' ? `No terminó: ${t.error}` : 'Análisis terminado.', t.estado === 'error');
+      return cargarTodo();
+    }
+    pintar(); vigilar();
+  }, 1500);
+}
+
+// ------------------------------------------------------------- la ruta
+function hist() { return (S.backlog && S.backlog.historias) || []; }
+function estadoEtapas() {
+  const h = hist(), st = S.backlog && S.backlog.stats, docs = S.archivos.filter(f => f.ruta !== 'project.yaml');
+  const t = S.estado && S.estado.trabajo || {};
+  const r = {};
+  r.documentos = docs.length ? ['hecha', plural(docs.length, 'documento', 'documentos')] : ['', 'Sube actas, notas o requisitos'];
+  r.analisis = enCurso() ? ['curso', t.tipo === 'refinamiento' ? `Reanalizando ${t.detalle}` : 'En curso…']
+    : t.estado === 'error' ? ['error', 'No terminó'] : h.length ? ['hecha', plural(h.length, 'historia', 'historias')] : ['', 'Sin analizar'];
+  if (!st || !h.length) { r.revision = r.estimacion = r.priorizacion = ['', 'Después del análisis']; }
+  else {
+    const porDecidir = st.decision + st.revisar + st.listas;
+    r.revision = st.decision ? ['humano', `${plural(st.decision, 'espera', 'esperan')} tu decisión`]
+      : porDecidir ? ['humano', `${porDecidir} por aprobar`] : ['hecha', `${st.aprobadas} aprobadas`];
+    const sinEst = st.total - st.estimadas;
+    r.estimacion = sinEst ? ['humano', `${sinEst} sin estimar`] : ['hecha', `${st.puntos} puntos${st.spikes ? `, ${plural(st.spikes, 'spike', 'spikes')}` : ''}`];
+    r.priorizacion = (S.backlog.ciclos_dependencia || []).length ? ['humano', 'Hay dependencias circulares']
+      : ['hecha', `Alta ${st.prioridad.Alta} · Media ${st.prioridad.Media} · Baja ${st.prioridad.Baja}`];
+  }
+  const cfg = S.sbiaCfg;
+  if (!cfg) r.publicacion = ['', 'Comprobando conexión…'];
+  else if (!cfg.configurado) r.publicacion = ['', 'Falta conectar SmartBacklogIA'];
+  else if (!cfg.conectado) r.publicacion = ['error', 'SmartBacklogIA no responde'];
+  else if (S.sbia) {
+    const n = S.sbia.resumen.crear, pub = S.sbia.historias.length;
+    r.publicacion = n ? ['humano', `${plural(n, 'lista', 'listas')} para publicar`] : pub ? ['hecha', `${pub} en ${S.sbia.clave}`] : ['', 'Nada aprobado todavía'];
+  } else r.publicacion = ['', S.sbiaError ? 'Error al consultar' : 'Cargando…'];
+  return r;
+}
+function pintarRuta() {
+  const r = estadoEtapas();
+  $('#linea-propia').innerHTML = ETAPAS.map((e, i) => {
+    const [cls, txt] = r[e.id];
+    return `<li><button class="estacion ${cls} ${e.transbordo ? 'transbordo' : ''}" data-vista="${e.id}" ${S.vista === e.id ? 'aria-current="page"' : ''}>
+      <i class="punto" aria-hidden="true"></i><b>${i + 1}. ${esc(e.nombre)}</b><span>${esc(txt)}</span></button></li>`;
+  }).join('');
+  const etapas = S.sbia && S.sbia.etapas && S.sbia.etapas.length ? S.sbia.etapas
+    : ['Generación de HU', 'Clasificación', 'Estimación', 'Priorización', 'Smart Product Backlog'].map((n, i) => ({stage_number: i + 1, name: n, status: 'pending'}));
+  const primera = etapas.find(e => e.status !== 'approved');
+  $('#linea-sbia').innerHTML = etapas.map(e => {
+    const hecha = e.status === 'approved', toca = S.sbia && S.sbia.existe && primera === e;
+    return `<li><button class="estacion ${hecha ? 'hecha' : toca ? 'humano' : ''}" data-vista="sbia" ${S.vista === 'sbia' && e === primera ? 'aria-current="page"' : ''}>
+      <i class="punto" aria-hidden="true"></i><b>${esc(e.name)}</b>${toca ? '<span>Aprobar en SmartBacklogIA</span>' : ''}</button></li>`;
+  }).join('');
+}
+
+// --------------------------------------------------------------- vistas
+function pintar() {
+  pintarRuta();
+  const v = $('#vista');
+  if (!S.pid) { v.innerHTML = vistaSinProyecto(); return; }
+  v.innerHTML = ({documentos: vistaDocumentos, analisis: vistaAnalisis, revision: vistaRevision, estimacion: vistaEstimacion,
+    priorizacion: vistaPriorizacion, publicacion: vistaPublicacion, sbia: vistaSbia})[S.vista]();
+}
+function vistaSinProyecto() {
+  return `<h1>Crea tu primer proyecto</h1><p class="bajada">Un proyecto agrupa los documentos de los que salen sus historias.</p>${formProyecto()}`;
+}
+function formProyecto() {
+  return `<form id="form-proyecto" class="fila-acciones"><input id="np-nombre" required minlength="2" placeholder="Nombre, p. ej. Monitoreo Amazonía" style="flex:1;min-width:220px;padding:8px 10px;border:1px solid var(--linea);border-radius:4px;background:var(--papel-2)"><button class="btn" type="submit">Crear proyecto</button></form>`;
+}
+
+function vistaDocumentos() {
+  const docs = S.archivos.filter(f => f.ruta !== 'project.yaml');
+  const filas = docs.map(f => `<tr><td>${esc(f.nombre)}${f.audio ? `<div class="small muted">${f.transcrito ? 'Transcrito' : 'Sin transcripción'}</div>` : ''}</td>
+    <td>${esc(CATEGORIAS[f.categoria] || f.categoria)}</td><td>${esc(f.formato)}</td><td class="num">${tamano(f.tamano)}</td>
+    <td class="small muted">${esc((f.actualizado || '').slice(0, 10))}</td></tr>`).join('');
+  return `<h1>Documentos</h1>
+    <p class="bajada">Lo que leen los agentes: actas, notas de reuniones, requisitos y diagramas BPMN de <b>${esc(S.pid)}</b>. Los audios se transcriben con Gemini al subirlos.</p>
+    <label class="soltar" id="soltar" tabindex="0">Arrastra archivos aquí o <u>elígelos</u><br><span class="small">PDF, Word, PowerPoint, Excel, Markdown, texto, BPMN o audio</span>
+      <input type="file" id="archivos" multiple class="sr"></label>
+    ${docs.length ? `<h2>${plural(docs.length, 'documento', 'documentos')}</h2><div class="tabla"><table><thead><tr><th>Archivo</th><th>Tipo</th><th>Formato</th><th class="num">Tamaño</th><th>Actualizado</th></tr></thead><tbody>${filas}</tbody></table></div>
+      <div class="fila-acciones"><button class="btn" data-ir="analisis">Ir al análisis</button></div>`
+      : '<p class="vacio">Este proyecto aún no tiene documentos. Sube al menos un acta o unas notas para que el generador proponga historias.</p>'}
+    <h2>Otro proyecto</h2>${formProyecto()}`;
+}
+
+function vistaAnalisis() {
+  const pr = S.estado && S.estado.progreso || {}, t = S.estado && S.estado.trabajo || {};
+  const run = S.estado && S.estado.proyecto && S.estado.proyecto.ultima_ejecucion;
+  const corriendo = enCurso(), h = hist();
+  const idx = corriendo ? TRAMOS.findIndex(x => x[0] === pr.etapa) : (h.length ? 3 : -1);
+  const tramos = TRAMOS.map(([id, titulo, ayuda], i) => {
+    const cls = i < idx ? 'hecho' : i === idx ? 'ahora' : '';
+    let extra = '';
+    if (id === 'fuentes' && pr.documentos != null) extra = plural(pr.documentos, 'documento', 'documentos');
+    if (id === 'historias' && pr.historias != null) extra = plural(pr.historias, 'historia', 'historias');
+    if (id === 'evaluacion' && corriendo && pr.etapa === 'evaluacion' && pr.total) extra = `${pr.hechas} de ${pr.total}`;
+    const barra = id === 'evaluacion' && corriendo && pr.etapa === 'evaluacion' && pr.total ? `<div class="barra"><i style="width:${Math.round(100 * pr.hechas / pr.total)}%"></i></div>` : '';
+    return `<li class="${cls}"><div><b>${titulo}</b><small>${i === idx && corriendo && pr.actual ? `Ahora: ${esc(pr.actual)}` : ayuda}</small>${barra}</div><span class="small muted">${extra || (i < idx ? 'Hecho' : '')}</span></li>`;
+  }).join('');
+  const consumo = run && (run.tokens_in || run.tokens_out) ? `<p class="small muted">Última ejecución: ${(run.tokens_in + run.tokens_out).toLocaleString('es-CO')} tokens${run.cost_usd != null ? `, unos US$ ${run.cost_usd.toLocaleString('es-CO', {maximumFractionDigits: 4})} a precio de lista` : ''}.</p>` : '';
+  return `<h1>Análisis multiagente</h1>
+    <p class="bajada">Gemini lee los documentos, propone o normaliza las historias y cada una pasa por el analista, arquitectura, QA y estimación. Ninguna queda aprobada sin una persona.</p>
+    ${t.estado === 'error' && !corriendo ? `<div class="aviso error"><b>El último análisis no terminó.</b> ${esc(t.error)}</div>` : ''}
+    <div class="fila-acciones">
+      <button class="btn" id="analizar" ${corriendo ? 'disabled' : ''}>${corriendo ? 'Analizando…' : h.length ? 'Analizar de nuevo' : 'Analizar proyecto'}</button>
+      <label class="check"><input type="checkbox" id="regenerar" ${corriendo ? 'disabled' : ''}> Volver a generar las historias desde los documentos</label>
+    </div>
+    <ol class="tramos">${tramos}</ol>${consumo}
+    ${h.length && !corriendo ? `<div class="fila-acciones"><button class="btn sec" data-ir="revision">Revisar las historias</button></div>` : ''}`;
+}
+
+function filtroHistoria(h) {
+  return S.filtro === 'todas' || (S.filtro === 'pendientes' ? ['decision', 'revisar', 'lista'].includes(h.estado_ui) : h.estado_ui === S.filtro);
+}
+function vistaRevision() {
+  const h = hist();
+  if (!h.length) return `<h1>Revisión humana</h1><p class="vacio">Todavía no hay historias. Lanza el análisis primero.</p><button class="btn" data-ir="analisis">Ir al análisis</button>`;
+  const st = S.backlog.stats, ocupado = enCurso();
+  if (S.filtro === 'pendientes' && !h.some(x => ['decision', 'revisar', 'lista'].includes(x.estado_ui))) S.filtro = 'todas';
+  const cuenta = f => h.filter(x => f === 'todas' || (f === 'pendientes' ? ['decision', 'revisar', 'lista'].includes(x.estado_ui) : x.estado_ui === f)).length;
+  const filtros = [['pendientes', 'Por decidir'], ['decision', 'Requieren decisión'], ['aprobada', 'Aprobadas'], ['descartada', 'Descartadas'], ['todas', 'Todas']]
+    .map(([k, l]) => `<button class="filtro" data-filtro="${k}" aria-pressed="${S.filtro === k}">${l} ${cuenta(k)}</button>`).join('');
+  const grupos = {};
+  h.filter(filtroHistoria).forEach(x => (grupos[x.epica] = grupos[x.epica] || []).push(x));
+  const epicas = Object.entries(grupos).map(([nombre, lista]) => {
+    const ep = S.backlog.epicas.find(e => e.nombre === nombre) || {};
+    return `<div class="epica"><h2>${esc(nombre)}</h2><span class="small muted">${ep.avance ?? 0} % aprobado</span>
+      ${ep.aprobables ? `<button class="btn sec" style="padding:4px 10px;font-size:13px" data-aprobar-epica="${esc(nombre)}" ${ocupado ? 'disabled' : ''}>${ep.aprobables === 1 ? 'Aprobar la lista de esta épica' : `Aprobar las ${ep.aprobables} listas de esta épica`}</button>` : ''}</div>
+      ${lista.map(historia).join('')}`;
+  }).join('');
+  return `<h1>Revisión humana</h1>
+    <p class="bajada">Aprueba, pide cambios o descarta cada historia. Las que muestran una pregunta esperan tu decisión antes de seguir.</p>
+    <div class="cifras"><div><b>${st.decision}</b><span>Requieren decisión</span></div><div><b>${st.revisar + st.listas}</b><span>Por aprobar</span></div>
+      <div><b>${st.aprobadas}</b><span>Aprobadas</span></div><div><b>${st.calidad_promedio}</b><span>Calidad promedio</span></div></div>
+    <div class="filtros" role="group" aria-label="Filtrar historias">${filtros}</div>
+    ${epicas || '<p class="vacio">Ninguna historia en este filtro.</p>'}`;
+}
+function historia(h) {
+  const prop = h.propuesta || {};
+  const criterios = (prop.acceptance_criteria && prop.acceptance_criteria.length ? prop.acceptance_criteria : h.original.criterios) || [];
+  const fin = ['descartada', 'analizando', 'pendiente', 'error'].includes(h.estado_ui);
+  const dis = enCurso() ? 'disabled' : '';
+  const restantes = (S.backlog.max_refinamientos || 2) - (h.refinamientos || 0);
+  let pide = '';
+  if (h.estado_ui === 'decision' && h.decision) {
+    const d = h.decision;
+    pide = `<div class="pide"><b>${esc(d.motivo)}</b>${d.recomendacion ? `<div>Recomendación: ${esc(d.recomendacion)}</div>` : ''}
+      ${d.preguntas && d.preguntas.length ? `<ul>${d.preguntas.map(q => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}</div>`;
+  } else if (h.estado_ui === 'revisar' && h.hitl.motivos.length) {
+    pide = `<div class="pide">Conviene mirarla: <ul>${h.hitl.motivos.slice(0, 3).map(m => `<li>${esc(m.descripcion)}</li>`).join('')}</ul></div>`;
+  } else if (h.estado_ui === 'error') pide = `<div class="aviso error">${esc(h.error)}</div>`;
+  const e = h.estimacion;
+  return `<article class="historia s-${esc(h.estado_ui)}" id="h-${esc(h.id)}">
+    <div class="h-cab"><h3><code>${esc(h.id)}</code>${esc(prop.title || h.titulo)}</h3><span class="marca-estado e-${esc(h.estado_ui)}">${ESTADOS[h.estado_ui] || esc(h.estado_ui)}</span></div>
+    <p class="narrativa">${esc(prop.narrative || h.original.narrativa)}</p>
+    ${criterios.length ? `<ul class="criterios">${criterios.slice(0, 6).map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+    <div class="datos"><span>${esc(h.tipo)}</span><span>Prioridad <b>${esc(h.prioridad || '—')}</b></span><span>Calidad <b>${h.calidad ?? '—'}</b></span>
+      <span>Confianza <b>${pct(h.confianza)}</b></span><span>HITL nivel <b>${h.hitl.nivel}</b></span>
+      <span>${e && e.puntos ? `<b>${e.puntos} pts</b> (${e.rango.min}–${e.rango.max})${e.spike && e.spike.required ? ` + spike ${e.spike.points}` : ''}` : 'Sin estimar'}</span>
+      ${(h.evidencia || []).length ? `<span>Evidencia: ${esc(((h.evidencia[0].source || '').split('/').pop()))}</span>` : ''}</div>
+    ${pide}
+    ${fin ? '' : `<div class="acciones">
+      <button class="btn ok" data-decidir="APPROVED" data-id="${esc(h.id)}" ${h.estado_ui === 'aprobada' ? 'disabled' : dis}>${h.estado_ui === 'aprobada' ? 'Aprobada' : 'Aprobar'}</button>
+      <button class="btn sec" data-abrir-refinar="${esc(h.id)}" ${restantes <= 0 ? 'disabled title="Ya se usaron los refinamientos permitidos"' : dis}>Pedir cambios</button>
+      ${h.estado_ui === 'decision' ? `<button class="btn sec" data-decidir="NEEDS_MORE_INFORMATION" data-id="${esc(h.id)}" ${dis}>Falta información</button>` : ''}
+      <button class="btn alerta" data-decidir="REJECTED" data-id="${esc(h.id)}" ${dis}>Descartar</button></div>
+    <div class="refinar" id="ref-${esc(h.id)}"><label class="small muted" for="txt-${esc(h.id)}">Qué debe cambiar. Los agentes la reanalizan con tu indicación (quedan ${restantes}).</label>
+      <textarea id="txt-${esc(h.id)}" rows="2" placeholder="Ej. que también valide la nubosidad antes de procesar la escena"></textarea>
+      <div class="acciones"><button class="btn" data-decidir="MODIFIED" data-id="${esc(h.id)}" ${dis}>Enviar y reanalizar</button></div></div>`}
+  </article>`;
+}
+
+function vistaEstimacion() {
+  const h = hist().filter(x => x.estado_ui !== 'descartada');
+  if (!h.length) return `<h1>Estimación</h1><p class="vacio">Sin historias que estimar todavía.</p>`;
+  const st = S.backlog.stats;
+  const nombre = Object.fromEntries(Object.values(FACTORES).flat().map(([k, l]) => [k, l]));
+  const filas = h.map(x => {
+    const e = x.estimacion || {};
+    const fac = Object.entries(e.factores || {}).map(([k, v]) => `${nombre[k] || k} ${v}`).join(', ');
+    return `<tr><td><code>${esc(x.id)}</code> ${esc(x.titulo)}</td><td>${esc(x.tipo)}</td><td class="small">${esc(fac) || (e.error ? `<span style="color:var(--rojo)">${esc(e.error)}</span>` : '—')}</td>
+      <td class="num"><b>${e.puntos ?? '—'}</b>${e.rango ? `<div class="small muted">${e.rango.min}–${e.rango.max}</div>` : ''}</td>
+      <td class="num">${e.spike && e.spike.required ? e.spike.points : ''}</td><td class="small">${e.origen === 'humano' ? `Ajustada por ${esc(e.decidido_por)}` : e.puntos ? 'Agente' : ''}</td>
+      <td><button class="btn sec" style="padding:4px 10px;font-size:13px" data-estimar="${esc(x.id)}" ${enCurso() ? 'disabled' : ''}>Ajustar</button></td></tr>`;
+  }).join('');
+  return `<h1>Estimación</h1>
+    <p class="bajada">El agente puntúa cada factor de 1 a 5 y el servidor calcula los puntos en la escala de Fibonacci. Una HU-IA con datos o riesgo altos exige un spike de 2 puntos. Tu ajuste prevalece y queda en la auditoría.</p>
+    <div class="cifras"><div><b>${st.puntos}</b><span>Puntos</span></div><div><b>${st.estimadas} de ${st.total}</b><span>Estimadas</span></div>
+      <div><b>${st.spikes}</b><span>Con spike</span></div><div><b>${st.hu_ia}</b><span>HU-IA</span></div></div>
+    <div class="tabla"><table><thead><tr><th>Historia</th><th>Tipo</th><th>Factores</th><th class="num">Puntos</th><th class="num">Spike</th><th>Por</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
+    <p class="small muted">En SmartBacklogIA la etapa de estimación usa puntos de función (IFPUG). Esta estimación viaja en la referencia de cada historia publicada, para comparar ambos métodos.</p>`;
+}
+
+function vistaPriorizacion() {
+  const h = hist().filter(x => x.estado_ui !== 'descartada');
+  if (!h.length) return `<h1>Priorización</h1><p class="vacio">Sin historias todavía.</p>`;
+  const ciclos = S.backlog.ciclos_dependencia || [];
+  const filas = h.map((x, i) => `<tr><td class="num">${x.orden != null ? x.orden + 1 : '—'}</td><td><code>${esc(x.id)}</code> ${esc(x.titulo)}</td>
+    <td><b>${esc(x.prioridad || '—')}</b>${x.prioridad_motivo ? `<div class="small muted">${esc(x.prioridad_motivo)}</div>` : ''}</td>
+    <td class="small">${x.prioridad_origen === 'humano' ? 'Persona' : x.prioridad_origen === 'ia' ? 'Agente' : x.prioridad_origen === 'documento' ? 'Documento' : ''}</td>
+    <td class="small">${(x.depende_de || []).map(esc).join(', ')}</td><td><span class="marca-estado e-${esc(x.estado_ui)}">${ESTADOS[x.estado_ui]}</span></td></tr>`).join('');
+  return `<h1>Priorización</h1>
+    <p class="bajada">El orden recomendado respeta las dependencias entre historias. Viaja a SmartBacklogIA como su rango de prioridad. Para cambiar la prioridad de una historia, pide el cambio en la revisión.</p>
+    ${ciclos.length ? `<div class="aviso"><b>Dependencias circulares:</b> ${ciclos.map(c => esc(c.join(' → '))).join('; ')}. Rompe una para que el orden sea válido.</div>` : ''}
+    <div class="tabla"><table><thead><tr><th class="num">Orden</th><th>Historia</th><th>Prioridad</th><th>Definida por</th><th>Depende de</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+}
+
+function vistaPublicacion() {
+  const cfg = S.sbiaCfg;
+  const cab = `<h1>Publicación en SmartBacklogIA</h1>
+    <p class="bajada">Envía las historias aprobadas aquí al backlog de SmartBacklogIA, donde siguen sus cinco etapas con roles. Lo que alguien ya editó allá no se pisa.</p>`;
+  if (!cfg) return cab + '<p class="vacio">Comprobando la conexión…</p>';
+  if (!cfg.configurado || !cfg.conectado) {
+    return cab + `<div class="aviso ${cfg.configurado ? 'error' : ''}"><b>${cfg.configurado ? 'SmartBacklogIA no responde.' : 'Falta conectar SmartBacklogIA.'}</b> ${esc(cfg.error)}</div>
+      <h2>Cómo conectarlo</h2><ol class="criterios" style="font-family:var(--ui)"><li>Levanta SmartBacklogIA (INICIAR.cmd) y entra como administrador.</li>
+      <li>En Administración, genera una API key con el nombre <b>hu-multiagent</b>.</li>
+      <li>En el <code>.env</code> de este repo define <code>SBIA_URL=${esc(cfg.url || 'http://localhost:8000')}</code>, <code>SBIA_API_KEY=…</code> y, si quieres, <code>SBIA_CLAVES=SERVI_SINCHI=SINCHI</code>.</li>
+      <li>Reinicia <code>adk_web.py</code>.</li></ol>
+      <div class="fila-acciones"><button class="btn sec" id="reintentar">Comprobar de nuevo</button></div>`;
+  }
+  if (S.sbiaError) return cab + `<div class="aviso error">${esc(S.sbiaError)}</div>`;
+  if (!S.sbia) return cab + '<p class="vacio">Cargando…</p>';
+  const plan = (S.plan && S.plan.plan) || S.sbia.plan;
+  const res = (S.plan && S.plan.resumen) || S.sbia.resumen;
+  const enviar = res.crear + res.actualizar;
+  const filas = plan.map(p => `<tr><td><span class="marca-estado e-${p.accion}">${{crear: 'Crear', actualizar: 'Actualizar', omitir: 'No se envía'}[p.accion]}</span></td>
+    <td><code>${esc(p.id)}</code> ${esc(p.titulo)}</td><td class="small muted">${esc(p.motivo || (p.codigo ? `Será ${p.codigo}` : ''))}</td>
+    <td>${p.codigo ? `<code>${esc(p.codigo)}</code>` : ''}</td></tr>`).join('');
+  const ag = cfg.agente || {};
+  return cab + `<p class="small muted">Conectado a ${esc(cfg.url)}${ag.model ? `, cuyo agente usa ${esc(ag.model)}${ag.backend ? ` en ${esc(ag.backend)}` : ''}` : ''}.
+      Proyecto allá: <b>${esc(S.sbia.clave)}</b>${S.sbia.existe ? '' : ' (se crea al publicar)'}.</p>
+    <div class="fila-acciones">
+      <label class="check"><input type="checkbox" data-opcion="actualizar" ${S.opciones.actualizar ? 'checked' : ''}> Reenviar las ya publicadas que sigan en borrador</label>
+      <label class="check"><input type="checkbox" data-opcion="incluir_sin_aprobar" ${S.opciones.incluir_sin_aprobar ? 'checked' : ''}> Incluir las que aún no apruebas</label>
+    </div>
+    ${S.opciones.incluir_sin_aprobar ? '<div class="aviso">Se enviarán historias sin tu aprobación; quedan marcadas así en su referencia. Las que esperan una decisión nunca se envían.</div>' : ''}
+    <div class="tabla"><table><thead><tr><th>Acción</th><th>Historia</th><th>Detalle</th><th>Código allá</th></tr></thead><tbody>${filas}</tbody></table></div>
+    <div class="fila-acciones"><button class="btn ciruela" id="publicar" ${enviar && !enCurso() ? '' : 'disabled'}>${enviar ? `Publicar ${plural(enviar, 'historia', 'historias')}` : 'Nada para publicar'}</button>
+      ${S.sbia.existe ? `<a class="btn sec" href="${esc(S.sbia.url)}" target="_blank" rel="noopener">Abrir ${esc(S.sbia.clave)} en SmartBacklogIA</a>` : ''}</div>`;
+}
+
+function vistaSbia() {
+  const cab = `<h1>Etapas en SmartBacklogIA</h1><p class="bajada">Allá cada etapa la aprueba una persona con su rol, en orden. Desde aquí solo se consultan: un servicio no puede aprobarlas.</p>`;
+  if (!S.sbia) return cab + `<p class="vacio">${S.sbiaCfg && !S.sbiaCfg.conectado ? 'SmartBacklogIA no está conectado. Revisa la etapa de publicación.' : 'Cargando…'}</p>`;
+  if (!S.sbia.existe) return cab + `<p class="vacio">El proyecto ${esc(S.sbia.clave)} todavía no existe allá. Se crea con la primera publicación.</p><button class="btn ciruela" data-ir="publicacion">Ir a publicación</button>`;
+  const etapas = S.sbia.etapas.map(e => `<tr><td class="num">${e.stage_number}</td><td><b>${esc(e.name)}</b></td>
+    <td><span class="marca-estado e-${e.status === 'approved' ? 'approved' : 'pend'}">${e.status === 'approved' ? 'Aprobada' : e.status === 'pending' ? 'Pendiente' : esc(e.status)}</span></td>
+    <td class="small muted">${e.approved_by ? esc(e.approved_by.name || e.approved_by) : ''}${e.approved_at ? ` · ${esc(String(e.approved_at).slice(0, 10))}` : ''}${e.change_summary ? `<div>${esc(e.change_summary)}</div>` : ''}</td></tr>`).join('');
+  const hs = S.sbia.historias.map(x => `<tr><td><code>${esc(x.code)}</code></td><td>${esc(x.title)}</td><td>${esc(x.status)}</td>
+    <td>${x.type === 'HU_IA' ? 'HU-IA' : 'HU-Tradicional'}</td><td class="num">${x.function_points ?? '—'}</td><td class="num">${x.priority_rank ?? ''}</td></tr>`).join('');
+  return cab + `<div class="tabla"><table><thead><tr><th class="num">Etapa</th><th>Nombre</th><th>Estado</th><th>Aprobación</th></tr></thead><tbody>${etapas}</tbody></table></div>
+    <div class="fila-acciones"><a class="btn ciruela" href="${esc(S.sbia.url)}" target="_blank" rel="noopener">Aprobar etapas en SmartBacklogIA</a><button class="btn sec" id="reintentar">Actualizar</button></div>
+    <h2>${plural(S.sbia.historias.length, 'historia publicada', 'historias publicadas')} desde aquí</h2>
+    ${hs ? `<div class="tabla"><table><thead><tr><th>Código</th><th>Título</th><th>Estado allá</th><th>Tipo</th><th class="num">Puntos de función</th><th class="num">Prioridad</th></tr></thead><tbody>${hs}</tbody></table></div>` : '<p class="vacio">Ninguna todavía.</p>'}`;
+}
+
+// ------------------------------------------------------------- acciones
+function ir(vista) { S.vista = vista; S.plan = null; guardar('ruta.vista', vista); pintar(); $('#vista').focus({preventScroll: true}); window.scrollTo({top: 0}); }
+async function accion(fn, okMsg) {
+  try { const r = await fn(); if (okMsg) avisar(typeof okMsg === 'function' ? okMsg(r) : okMsg); return r; }
+  catch (e) { avisar(e.message, true); if (e.status === 409) cargarTodo(); }
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('button, a'); if (!b) return;
+  if (b.dataset.vista) return ir(b.dataset.vista);
+  if (b.dataset.ir) return ir(b.dataset.ir);
+  if (b.dataset.filtro) { S.filtro = b.dataset.filtro; return pintar(); }
+  if (b.id === 'tema') {
+    const raiz = document.documentElement, oscuro = raiz.dataset.theme ? raiz.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    raiz.dataset.theme = oscuro ? 'light' : 'dark'; guardar('ruta.tema', raiz.dataset.theme); return;
+  }
+  if (b.id === 'reintentar') return cargarSbia();
+  if (b.id === 'analizar') {
+    b.disabled = true;
+    await accion(async () => {
+      const r = await pedir(`/projects/${S.pid}/analyze`, {metodo: 'POST', json: {regenerar: $('#regenerar').checked}});
+      S.estado = {...(S.estado || {}), trabajo: r.trabajo, progreso: {etapa: 'fuentes'}}; pintar(); vigilar();
+    }, 'Análisis iniciado. Puedes seguir aquí o volver luego.');
+    return;
+  }
+  if (b.dataset.abrirRefinar) { const c = $(`#ref-${CSS.escape(b.dataset.abrirRefinar)}`); c.classList.toggle('abierto'); c.querySelector('textarea').focus(); return; }
+  if (b.dataset.decidir) {
+    const id = b.dataset.id, d = b.dataset.decidir, h = hist().find(x => x.id === id);
+    let comentario = '';
+    if (d === 'MODIFIED') { comentario = $(`#txt-${CSS.escape(id)}`).value.trim(); if (!comentario) return avisar('Escribe qué debe cambiar.', true); }
+    if (d === 'REJECTED') { comentario = prompt(`Por qué descartas ${id}`) || ''; if (!comentario.trim()) return; }
+    if (d === 'NEEDS_MORE_INFORMATION') { comentario = prompt(`Qué información falta para ${id}`) || ''; if (!comentario.trim()) return; }
+    b.disabled = true;
+    await accion(async () => {
+      const r = await pedir(`/projects/${S.pid}/stories/${id}/decision`, {metodo: 'POST', json: {decision: d, comentario, version: h ? h.version : null}});
+      if (d === 'MODIFIED') { S.estado = {...(S.estado || {}), trabajo: r.trabajo}; vigilar(); }
+      await cargarTodo();
+    }, {APPROVED: `${id} aprobada.`, REJECTED: `${id} descartada.`, MODIFIED: `Reanalizando ${id} con tu indicación.`, NEEDS_MORE_INFORMATION: `Pedida información para ${id}.`}[d]);
+    return;
+  }
+  if (b.dataset.aprobarEpica) {
+    b.disabled = true;
+    await accion(async () => { const r = await pedir(`/projects/${S.pid}/epics/approve`, {metodo: 'POST', json: {epica: b.dataset.aprobarEpica}}); await cargarTodo(); return r; },
+      r => `${plural((r.aprobadas || []).length, 'historia aprobada', 'historias aprobadas')}.`);
+    return;
+  }
+  if (b.dataset.estimar) return abrirEstimar(b.dataset.estimar);
+  if (b.id === 'publicar') {
+    const res = S.plan ? S.plan.resumen : S.sbia.resumen;
+    if (!confirm(`Se enviarán ${res.crear + res.actualizar} historia(s) al proyecto ${S.sbia.clave} de SmartBacklogIA.`)) return;
+    b.disabled = true;
+    await accion(async () => {
+      const r = await pedir(`/projects/${S.pid}/smartbacklog/publish`, {metodo: 'POST', json: {...S.opciones}});
+      S.plan = null; await cargarSbia();
+      if (S.opciones.actualizar || S.opciones.incluir_sin_aprobar) { S.plan = await pedir(`/projects/${S.pid}/smartbacklog/publish`, {metodo: 'POST', json: {...S.opciones, simular: true}}); pintar(); }
+      return r;
+    }, r => r.resultado ? `Publicado en ${r.clave}: ${r.resultado.stories_created} nuevas, ${r.resultado.stories_updated} actualizadas.` : 'Nada para publicar.');
+  }
+});
+document.addEventListener('change', async ev => {
+  const t = ev.target;
+  if (t.id === 'proyecto') { S.pid = t.value; guardar('ruta.pid', S.pid); S.backlog = S.estado = S.sbia = null; S.archivos = []; pintar(); return cargarTodo(); }
+  if (t.id === 'usuario') guardar('ruta.usuario', t.value.trim());
+  if (t.id === 'archivos') subir(t.files);
+  if (t.dataset.opcion) {
+    S.opciones[t.dataset.opcion] = t.checked;
+    await accion(async () => { S.plan = await pedir(`/projects/${S.pid}/smartbacklog/publish`, {metodo: 'POST', json: {...S.opciones, simular: true}}); pintar(); });
+  }
+});
+document.addEventListener('submit', async ev => {
+  if (ev.target.id !== 'form-proyecto') return;
+  ev.preventDefault();
+  const nombre = $('#np-nombre').value.trim();
+  await accion(async () => {
+    const r = await pedir('/projects', {metodo: 'POST', json: {nombre}});
+    guardar('ruta.pid', r.project_id); await cargarProyectos(); S.vista = 'documentos'; await cargarTodo();
+  }, `Proyecto «${nombre}» creado.`);
+});
+['dragover', 'dragleave', 'drop'].forEach(tipo => document.addEventListener(tipo, ev => {
+  const z = ev.target.closest && ev.target.closest('#soltar'); if (!z) return;
+  ev.preventDefault(); z.classList.toggle('sobre', tipo === 'dragover');
+  if (tipo === 'drop') subir(ev.dataTransfer.files);
+}));
+async function subir(lista) {
+  if (!lista || !lista.length) return;
+  const form = new FormData(); [...lista].forEach(f => form.append('files', f));
+  avisar(`Subiendo ${plural(lista.length, 'archivo', 'archivos')}…`);
+  await accion(async () => {
+    const r = await pedir(`/projects/${S.pid}/files`, {metodo: 'POST', form});
+    S.archivos = r.archivos; pintar();
+    const malos = r.resultados.filter(x => x.estado === 'error');
+    if (malos.length) throw new Error(malos.map(x => `${x.nombre}: ${x.mensaje}`).join(' · '));
+    return r;
+  }, r => `${plural(r.resultados.length, 'archivo guardado', 'archivos guardados')}.`);
+}
+
+// ------------------------------------------------------------ estimación
+function abrirEstimar(id) {
+  const h = hist().find(x => x.id === id), e = h.estimacion || {};
+  const dlg = $('#dlg-estimar');
+  dlg.dataset.id = id;
+  $('#dlg-titulo').textContent = `Ajustar estimación de ${id}`;
+  $('#dlg-tipo').value = h.tipo === 'HU-IA' ? 'HU_IA' : 'HU_TRADICIONAL';
+  $('#dlg-coment').value = '';
+  pintarFactores(e.factores || {});
+  dlg.showModal();
+}
+function pintarFactores(previos) {
+  const tipo = $('#dlg-tipo').value;
+  $('#dlg-ayuda').textContent = tipo === 'HU_IA'
+    ? 'Método ia_factores_v1: riesgo 4 o más sube un nivel; datos o riesgo 4 o más exigen un spike de 2 puntos.'
+    : 'Método fibonacci_tradicional_v1: complejidad y esfuerzo pesan 40 % cada uno; incertidumbre, 20 %.';
+  $('#dlg-factores').innerHTML = FACTORES[tipo].map(([k, l, ayuda]) => `<label class="factor"><span><b>${l}</b><small>${ayuda}</small></span>
+    <select data-factor="${k}">${[1, 2, 3, 4, 5].map(v => `<option ${(previos[k] ?? 3) === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`).join('');
+}
+$('#dlg-tipo').addEventListener('change', () => pintarFactores({}));
+$('#dlg-estimar').addEventListener('close', async () => {
+  const dlg = $('#dlg-estimar');
+  if (dlg.returnValue !== 'guardar') return;
+  const id = dlg.dataset.id, h = hist().find(x => x.id === id);
+  const factores = Object.fromEntries([...dlg.querySelectorAll('[data-factor]')].map(s => [s.dataset.factor, +s.value]));
+  await accion(async () => {
+    const r = await pedir(`/projects/${S.pid}/stories/${id}/estimate`, {metodo: 'POST',
+      json: {tipo: $('#dlg-tipo').value, factores, comentario: $('#dlg-coment').value.trim(), version: h ? h.version : null}});
+    await cargarTodo(); return r;
+  }, `Estimación de ${id} guardada.`);
+});
+
+// ---------------------------------------------------------------- inicio
+(async () => {
+  const tema = guardar('ruta.tema'); if (tema) document.documentElement.dataset.theme = tema;
+  $('#usuario').value = guardar('ruta.usuario') || '';
+  const v = guardar('ruta.vista'); if (v && (ETAPAS.some(e => e.id === v) || v === 'sbia')) S.vista = v;
+  try { await cargarProyectos(); } catch (e) { $('#vista').innerHTML = `<div class="aviso error"><b>No se pudo leer la lista de proyectos.</b> ${esc(e.message)}</div>`; return; }
+  await cargarTodo();
+})();
+</script>
+</body>
+</html>

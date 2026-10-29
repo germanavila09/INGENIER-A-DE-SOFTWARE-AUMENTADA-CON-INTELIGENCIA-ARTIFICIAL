@@ -220,6 +220,8 @@ def test_adk_web_publica_spb_y_api(monkeypatch, tmp_path):
     with TestClient(app) as client:
         r = client.get("/spb")
         assert r.status_code == 200 and "Smart Product Backlog" in r.text
+        r = client.get("/flujo")
+        assert r.status_code == 200 and "Ruta de historias" in r.text and "/smartbacklog" in r.text
         assert client.get("/api/health").json()["agente_chat"] == "orquestador_hu"
         assert client.get("/list-apps").json() == ["agente_bucket", "orquestador_hu"]
     set_engine(None)

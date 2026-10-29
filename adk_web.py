@@ -24,6 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 AGENTS_DIR = ROOT / "agents"
 SPB_HTML = ROOT / "web" / "spb" / "index.html"   # front del Smart Product Backlog
+FLUJO_HTML = ROOT / "web" / "flujo" / "index.html"  # front de todas las etapas (incluye SmartBacklogIA)
 
 # VS Code ejecuta desde su propia carpeta: se trabaja siempre desde la raíz del repo.
 os.chdir(ROOT)
@@ -124,9 +125,10 @@ def main() -> None:
     @asynccontextmanager
     async def lifespan(app):
         print(f"\nADK Web listo en {url}/dev-ui  (Ctrl+C para detener)", flush=True)
+        print(f"Ruta de historias (todas las etapas) en {url}/flujo", flush=True)
         print(f"Smart Product Backlog en {url}/spb\n", flush=True)
         if not args.no_browser:
-            threading.Timer(1.0, webbrowser.open, args=(f"{url}/spb",)).start()
+            threading.Timer(1.0, webbrowser.open, args=(f"{url}/flujo",)).start()
         yield
 
     print("\nArrancando el servidor… (la primera vez puede tardar unos segundos)", flush=True)
@@ -181,6 +183,14 @@ def crear_app(host: str = "127.0.0.1", port: int = 8000, lifespan=None, **kwargs
     @app.get("/spb/", include_in_schema=False)
     def spb_slash():
         return RedirectResponse("/spb")
+
+    @app.get("/flujo", include_in_schema=False)
+    def flujo():
+        return FileResponse(FLUJO_HTML, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
+
+    @app.get("/flujo/", include_in_schema=False)
+    def flujo_slash():
+        return RedirectResponse("/flujo")
 
     return app
 

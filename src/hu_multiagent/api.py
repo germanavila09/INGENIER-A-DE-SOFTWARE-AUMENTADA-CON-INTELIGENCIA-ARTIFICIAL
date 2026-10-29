@@ -624,3 +624,81 @@ def exportar(project_id: str, formato: str = Query("json", pattern="^(json|csv)$
                     ", ".join(h["depende_de"]), "sí" if h["aprobada_por_humano"] else "no"])
     return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{nombre}.csv"'})
+
+
+# ========================================================== SmartBacklogIA
+# Transporte HTTP reemplazable en pruebas (SmartBacklogIA simulado); None = red real.
+SBIA_TRANSPORT = None
+
+
+def _sbia():
+    from .integrations.smartbacklog import SmartBacklogClient, SmartBacklogConfig, SmartBacklogError
+
+    try:
+        return SmartBacklogClient(SmartBacklogConfig.from_env(), transport=SBIA_TRANSPORT)
+    except (SmartBacklogError, ValueError) as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+def _sbia_http(exc) -> HTTPException:
+    status = getattr(exc, "status", None)
+    return HTTPException(409 if status == 409 else 502, str(exc))
+
+
+@router.get("/integracion/smartbacklog")
+def sbia_estado() -> dict:
+    """Configuración del puente (sin la API key) y si SmartBacklogIA responde."""
+    from .integrations.smartbacklog import SmartBacklogConfig, SmartBacklogError
+
+    try:
+        cfg = SmartBacklogConfig.from_env()
+    except ValueError as exc:
+        return {"configurado": False, "url": os.getenv("SBIA_URL", ""), "conectado": False, "error": str(exc)}
+    out = {"configurado": cfg.configurado, "url": cfg.url, "claves": cfg.claves, "conectado": False, "error": ""}
+    if not cfg.configurado:
+        out["error"] = "Falta SBIA_API_KEY (créala en SmartBacklogIA → Administración → API keys)."
+        return out
+    try:
+        with _sbia() as cli:
+            cli.salud()
+            agente = cli.proveedor()
+        out.update(conectado=True, agente={k: agente.get(k) for k in ("provider", "model", "backend", "configured")})
+    except SmartBacklogError as exc:
+        out["error"] = str(exc)
+    return out
+
+
+@router.get("/projects/{project_id}/smartbacklog")
+def sbia_proyecto(project_id: str, clave: str | None = Query(None)) -> dict:
+    from .integrations.smartbacklog import SmartBacklogError, estado_remoto
+
+    eng, pid, _ = _resolver(project_id)
+    try:
+        with _sbia() as cli:
+            return estado_remoto(eng, pid, cli, clave)
+    except SmartBacklogError as exc:
+        raise _sbia_http(exc) from exc
+
+
+class Publicacion(BaseModel):
+    clave: str | None = Field(None, max_length=10)
+    actualizar: bool = False
+    incluir_sin_aprobar: bool = False
+    simular: bool = False
+
+
+@router.post("/projects/{project_id}/smartbacklog/publish")
+def sbia_publicar(project_id: str, body: Publicacion | None = None, x_usuario: str | None = Header(None)) -> dict:
+    """Publica en SmartBacklogIA las HU aprobadas aquí (o solo muestra el plan con ``simular``)."""
+    from .integrations.smartbacklog import SmartBacklogError, publicar
+
+    eng, pid, _ = _resolver(project_id)
+    _sin_trabajo(pid)
+    body = body or Publicacion()
+    try:
+        with _sbia() as cli:
+            return publicar(eng, pid, cli, body.clave, actualizar=body.actualizar,
+                            incluir_sin_aprobar=body.incluir_sin_aprobar, simular=body.simular,
+                            usuario=_usuario(x_usuario))
+    except SmartBacklogError as exc:
+        raise _sbia_http(exc) from exc
