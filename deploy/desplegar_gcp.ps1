@@ -136,7 +136,8 @@ Write-Host "Se va a crear o actualizar:" -ForegroundColor Yellow
 Write-Host "  - APIs, repositorio de imágenes '$Ar' y secretos en Secret Manager (sin cambios de permisos IAM)"
 Write-Host "  - Los servicios usan la cuenta de Compute: leen y escriben en gs://$Bucket (documentos y salidas_hu/)"
 if (-not $sqlExiste) {
-    Write-Host "  - Cloud SQL '$Sql' PostgreSQL 16, db-f1-micro, 10 GB. COSTO FIJO aprox. 8-10 USD/mes mientras exista." -ForegroundColor Yellow
+    Write-Host "  - Cloud SQL '$Sql' PostgreSQL 16, db-f1-micro, 10 GB, solo IP privada. COSTO FIJO aprox. 8-10 USD/mes mientras exista." -ForegroundColor Yellow
+    Write-Host "  - Red privada: rango reservado para Cloud SQL en la VPC (default o una nueva 'ruta-vpc') y conexión de servicios" -ForegroundColor Yellow
 }
 Write-Host "  - Imágenes con Cloud Build y servicios Cloud Run 'smartbacklog' y 'hu-flujo' (costo por uso; 0 sin tráfico)"
 Write-Host "  - Gemini (Vertex AI) se cobra por uso cada vez que alguien analiza o genera historias"
@@ -149,7 +150,8 @@ if (-not $SinConfirmar) {
 # ------------------------------------------------------------------ base
 Paso "APIs"
 $apis = @("run.googleapis.com", "cloudbuild.googleapis.com", "artifactregistry.googleapis.com", "sqladmin.googleapis.com",
-          "secretmanager.googleapis.com", "aiplatform.googleapis.com", "iam.googleapis.com")
+          "secretmanager.googleapis.com", "aiplatform.googleapis.com", "iam.googleapis.com", "compute.googleapis.com",
+          "servicenetworking.googleapis.com")
 G services enable @apis
 
 Paso "Repositorio de imágenes"
@@ -157,24 +159,54 @@ if (-not (Existe artifacts repositories describe $Ar --location=$Region)) {
     G artifacts repositories create $Ar --repository-format=docker --location=$Region --description="Ruta de historias y SmartBacklogIA"
 }
 
+# ------------------------------------------------------------------ red privada
+# La organización prohíbe IP pública en Cloud SQL (constraints/sql.restrictPublicIp): la base solo tiene IP
+# privada en una VPC, y Cloud Run llega a ella con salida directa a la VPC (Direct VPC egress).
+Paso "Red privada para la base de datos"
+if (Existe compute networks describe default) {
+    $Red = "default"
+    $Subred = & gcloud compute networks subnets list --network=default --regions=$Region --project=$Proyecto --format="value(name)" 2>$null | Select-Object -First 1
+    if (-not $Subred) { Fallo "la red default no tiene subred en $Region." }
+} else {
+    $Red = "ruta-vpc"; $Subred = "ruta-$Region"
+    if (-not (Existe compute networks describe $Red)) { G compute networks create $Red --subnet-mode=custom }
+    if (-not (Existe compute networks subnets describe $Subred --region=$Region)) {
+        G compute networks subnets create $Subred --network=$Red --region=$Region --range=10.20.0.0/24 --enable-private-ip-google-access
+    }
+}
+$Rango = "ruta-sql-psa"
+if (-not (Existe compute addresses describe $Rango --global)) {
+    G compute addresses create $Rango --global --purpose=VPC_PEERING --prefix-length=20 --network=$Red `
+        --description="Rango para Cloud SQL con IP privada (Ruta de historias)"
+}
+$conectado = & gcloud services vpc-peerings list --network=$Red --project=$Proyecto --format="value(reservedPeeringRanges)" 2>$null
+if (-not $conectado) {
+    G services vpc-peerings connect --service=servicenetworking.googleapis.com --ranges=$Rango --network=$Red
+} elseif ($conectado -notmatch $Rango) {
+    G services vpc-peerings update --service=servicenetworking.googleapis.com --ranges="$(($conectado -split '[;,]') -join ','),$Rango" --network=$Red
+}
+$VpcRun = @("--network=$Red", "--subnet=$Subred", "--vpc-egress=private-ranges-only")
+
 # ------------------------------------------------------------------ base de datos y secretos
-Paso "Cloud SQL (la primera vez tarda 5-10 minutos)"
+Paso "Cloud SQL con IP privada (la primera vez tarda 5-10 minutos)"
 if (-not $sqlExiste) {
     G sql instances create $Sql --database-version=POSTGRES_16 --edition=ENTERPRISE --tier=db-f1-micro `
-        --region=$Region --storage-size=10 --storage-type=HDD --storage-auto-increase --availability-type=zonal
+        --region=$Region --storage-size=10 --storage-type=HDD --storage-auto-increase --availability-type=zonal `
+        --no-assign-ip --network="projects/$Proyecto/global/networks/$Red" --allocated-ip-range-name=$Rango
 }
-$conexion = "$($Proyecto):$($Region):$Sql"
+$ipSql = & gcloud sql instances describe $Sql --project=$Proyecto --format="value(ipAddresses[0].ipAddress)" 2>$null
+if (-not $ipSql) { Fallo "la instancia $Sql no tiene IP privada." }
 if (-not (Existe sql databases describe spb --instance=$Sql)) { G sql databases create spb --instance=$Sql }
-if (-not $Estado["db_password"]) {
-    $pg = NuevaClave 24
+if (-not $Estado["db_password"] -or $Estado["db_ip"] -ne $ipSql) {
+    $pg = if ($Estado["db_password"]) { $Estado["db_password"] } else { NuevaClave 24 }
     $hayUsuario = & gcloud sql users list --instance=$Sql --project=$Proyecto --format="value(name)" 2>$null | Where-Object { $_ -eq "spb" }
     if ($hayUsuario) {
         G sql users set-password spb --instance=$Sql --password=$pg
     } else {
         G sql users create spb --instance=$Sql --password=$pg
     }
-    GuardarSecreto "sbia-database-url" "postgresql+psycopg://spb:$pg@/spb?host=/cloudsql/$conexion"
-    $Estado["db_password"] = $pg; GuardarEstado
+    GuardarSecreto "sbia-database-url" "postgresql+psycopg://spb:$pg@$($ipSql):5432/spb"
+    $Estado["db_password"] = $pg; $Estado["db_ip"] = $ipSql; GuardarEstado
 }
 
 Paso "Secretos de SmartBacklogIA"
@@ -202,14 +234,14 @@ EnvYaml $envSb @{
 $secretosSb = "DATABASE_URL=sbia-database-url:latest,SESSION_SECRET=sbia-session-secret:latest,SEED_ADMIN_PASSWORD=sbia-admin-password:latest"
 
 Paso "Servicio smartbacklog"
-G run deploy smartbacklog @("--image=$ImgSb", "--service-account=$SaRun", "--region=$Region", "--add-cloudsql-instances=$conexion",
+G run deploy smartbacklog @VpcRun @("--image=$ImgSb", "--service-account=$SaRun", "--region=$Region",
     "--env-vars-file=$envSb", "--set-secrets=$secretosSb", "--memory=1Gi", "--cpu=1", "--no-cpu-throttling",
     "--min-instances=0", "--max-instances=2", "--timeout=900")
 $urlSb = & gcloud run services describe smartbacklog --region=$Region --project=$Proyecto --format="value(status.url)"
 
 Paso "Admin de SmartBacklogIA (job de seed)"
-G run jobs deploy smartbacklog-seed --image=$ImgSb --region=$Region --service-account=$SaRun `
-    --set-cloudsql-instances=$conexion --env-vars-file=$envSb --set-secrets=$secretosSb `
+G run jobs deploy smartbacklog-seed @VpcRun --image=$ImgSb --region=$Region --service-account=$SaRun `
+    --env-vars-file=$envSb --set-secrets=$secretosSb `
     --command=sh --args="-c,alembic upgrade head && python scripts/seed.py" --max-retries=0 --task-timeout=600
 G run jobs execute smartbacklog-seed --region=$Region --wait
 
