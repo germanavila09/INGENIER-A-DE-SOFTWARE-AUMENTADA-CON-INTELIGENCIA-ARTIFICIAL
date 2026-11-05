@@ -195,7 +195,8 @@ Paso "Cloud SQL con IP privada (la primera vez tarda 5-10 minutos)"
 if (-not $sqlExiste) {
     G sql instances create $Sql --database-version=POSTGRES_16 --edition=ENTERPRISE --tier=db-f1-micro `
         --region=$Region --storage-size=10 --storage-type=HDD --storage-auto-increase --availability-type=zonal `
-        --no-assign-ip --network="projects/$Proyecto/global/networks/$Red" --allocated-ip-range-name=$Rango
+        --no-assign-ip --network="projects/$Proyecto/global/networks/$Red"
+    # Sin --allocated-ip-range-name (solo en gcloud beta): Cloud SQL toma IP de los rangos ya conectados a la red.
 }
 $ipSql = & gcloud sql instances describe $Sql --project=$Proyecto --format="value(ipAddresses[0].ipAddress)" 2>$null
 if (-not $ipSql) { Fallo "la instancia $Sql no tiene IP privada." }
