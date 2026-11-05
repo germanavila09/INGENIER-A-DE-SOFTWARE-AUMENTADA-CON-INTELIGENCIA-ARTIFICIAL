@@ -6,23 +6,22 @@
   Crea (o actualiza, si ya existen) estos recursos y muestra el plan antes de tocar nada:
     - APIs: Cloud Run, Cloud Build, Artifact Registry, Cloud SQL Admin, Secret Manager, Vertex AI (+ IAP si aplica).
     - Repositorio de imágenes «ruta-historias» en Artifact Registry.
-    - Cuentas de servicio sa-hu-flujo y sa-smartbacklog con permisos mínimos (Vertex AI, bucket, Cloud SQL, secretos).
+    - Los dos servicios corren con la cuenta de servicio de Compute por defecto del proyecto, que ya tiene
+      Vertex AI, Storage, Secret Manager y Cloud Run Admin: el script no asigna permisos IAM (basta el rol Editor).
     - Cloud SQL PostgreSQL 16 «spb-pg» (db-f1-micro, 10 GB) para SmartBacklogIA.
     - Secretos: clave de sesión y de admin de SmartBacklogIA, URL de la base, API key del puente y usuarios de prueba.
     - Servicios Cloud Run «smartbacklog» y «hu-flujo», y el job «smartbacklog-seed» (crea el admin).
     - Usuarios de prueba en los dos servicios y proyecto SINCHIHU en SmartBacklogIA con ellos como miembros.
 
   Se puede volver a ejecutar: lo que ya existe se reutiliza, las imágenes se reconstruyen y los servicios se
-  actualizan. Las claves de los testers que ya existían se conservan.
+  actualizan. Las claves generadas se guardan en deploy\estado_despliegue.json (no se sube a git): consérvalo,
+  porque con rol Editor no se pueden leer de vuelta desde Secret Manager.
+
+  Para abrir los servicios al público (cada uno tiene su propio inicio de sesión), un paso de Cloud Build corre
+  como la cuenta de Compute, que sí tiene Cloud Run Admin.
 
 .PARAMETER Testers
-  Correos de quienes van a probar, separados por coma. Con -Acceso clave cada uno recibe una clave
-  (la misma para los dos servicios); con -Acceso iap entran a Ruta de historias con su cuenta de Google.
-
-.PARAMETER Acceso
-  clave (por defecto): usuario y clave por persona; funciona con cualquier correo.
-  iap: Identity-Aware Proxy con cuentas de Google. Para correos fuera de la organización del proyecto
-       puede requerir configurar la pantalla de consentimiento OAuth como «externa» en la consola.
+  Correos de quienes van a probar, separados por coma. Cada uno recibe una clave, la misma para los dos servicios.
 
 .EXAMPLE
   .\deploy\desplegar_gcp.ps1 -Testers "ana@correounivalle.edu.co,pedro@gmail.com"
@@ -31,7 +30,6 @@
 #>
 param(
     [string]$Testers = "",
-    [ValidateSet("clave", "iap")][string]$Acceso = "clave",
     [string]$Proyecto = "servi-modelos-ia-dev",
     [string]$Region = "us-central1",
     [string]$Bucket = "adk_ing",
@@ -45,8 +43,8 @@ $ErrorActionPreference = "Continue"
 $Repo = Split-Path -Parent $PSScriptRoot
 $Ar = "ruta-historias"
 $Sql = "spb-pg"
-$SaHu = "sa-hu-flujo@$Proyecto.iam.gserviceaccount.com"
-$SaSb = "sa-smartbacklog@$Proyecto.iam.gserviceaccount.com"
+$Acceso = "clave"
+$EstadoArchivo = Join-Path $Repo "deploy\estado_despliegue.json"
 $Tag = Get-Date -Format "yyyyMMdd-HHmmss"
 $ImgHu = "$Region-docker.pkg.dev/$Proyecto/$Ar/hu-flujo:$Tag"
 $ImgSb = "$Region-docker.pkg.dev/$Proyecto/$Ar/smartbacklog:$Tag"
@@ -68,36 +66,48 @@ function NuevaClave([int]$n = 20) {
     (New-Object Security.Cryptography.RNGCryptoServiceProvider).GetBytes($b)
     -join ($b | ForEach-Object { $c[$_ % $c.Length] })
 }
-function LeerSecreto($nombre) {
-    $v = & gcloud secrets versions access latest --secret=$nombre --project=$Proyecto 2>$null
-    if ($LASTEXITCODE -ne 0) { return $null }
-    return ($v -join "`n")
+# Estado local: las claves generadas (con rol Editor no se pueden leer de Secret Manager).
+$Estado = @{}
+if (Test-Path $EstadoArchivo) {
+    $leido = Get-Content $EstadoArchivo -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($p in $leido.PSObject.Properties) { $Estado[$p.Name] = $p.Value }
 }
-function GuardarSecreto($nombre, $valor, [string[]]$lectores) {
+function GuardarEstado { Texto $EstadoArchivo ($Estado | ConvertTo-Json -Depth 5) }
+function GuardarSecreto($nombre, $valor) {
+    # Crea el secreto o le agrega una versión. La cuenta de Compute lo lee (secretAccessor del proyecto).
     $f = Join-Path $Tmp "s_$nombre"
     Texto $f $valor
     if (Existe secrets describe $nombre) { G secrets versions add $nombre --data-file=$f | Out-Null }
     else { G secrets create $nombre --replication-policy=automatic --data-file=$f | Out-Null }
     Remove-Item $f -Force
-    foreach ($sa in $lectores) {
-        G secrets add-iam-policy-binding $nombre --member="serviceAccount:$sa" --role=roles/secretmanager.secretAccessor | Out-Null
-    }
 }
 function EnvYaml($ruta, [hashtable]$vars) {
     $lineas = $vars.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name): '$($_.Value -replace "'", "''")'" }
     Texto $ruta (($lineas -join "`n") + "`n")
 }
-function Desplegar($servicio, [string[]]$extra) {
-    # Sin chequeo IAM de invocación (no requiere allUsers, que muchas organizaciones bloquean):
-    # la autenticación la hace la propia aplicación. Si la versión de gcloud no lo admite, usa allUsers.
-    & gcloud run deploy $servicio @extra --no-invoker-iam-check --project=$Proyecto --region=$Region --quiet
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  --no-invoker-iam-check no funcionó; pruebo con --allow-unauthenticated" -ForegroundColor Yellow
-        & gcloud run deploy $servicio @extra --allow-unauthenticated --project=$Proyecto --region=$Region --quiet
-        if ($LASTEXITCODE -ne 0) {
-            Fallo "no se pudo desplegar $servicio. Si la organización prohíbe el acceso público, usa -Acceso iap."
-        }
-    }
+function AbrirAlPublico([string[]]$servicios) {
+    # Quitar el chequeo IAM de invocación exige run.services.setIamPolicy (no lo tiene Editor). Lo hace un paso
+    # de Cloud Build que corre como la cuenta de Compute (Cloud Run Admin). Cada servicio pide su propio login.
+    $cmds = ($servicios | ForEach-Object {
+        "(gcloud run services update $_ --region=$Region --no-invoker-iam-check --quiet || " +
+        "gcloud run services add-iam-policy-binding $_ --region=$Region --member=allUsers --role=roles/run.invoker --quiet)"
+    }) -join " && "
+    $yaml = Join-Path $Tmp "abrir.yaml"
+    Texto $yaml @"
+steps:
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+  entrypoint: bash
+  args: ['-c', '$($cmds -replace "'", "''")']
+serviceAccount: projects/$Proyecto/serviceAccounts/$SaRun
+options:
+  logging: CLOUD_LOGGING_ONLY
+"@
+    G builds submit --no-source --config=$yaml --region=$Region
+}
+function EsPublico($url) {
+    # Google responde 403 antes de llegar al servicio si sigue privado; la app responde 200 o 401.
+    try { Invoke-WebRequest -Uri $url -UseBasicParsing -Method Get -TimeoutSec 60 | Out-Null; return $true }
+    catch { $c = [int]$_.Exception.Response.StatusCode; return ($c -ne 403 -and $c -ne 0) }
 }
 
 # ------------------------------------------------------------------ verificaciones
@@ -109,6 +119,7 @@ if (-not (Test-Path (Join-Path $RutaSmartBacklog "Dockerfile"))) { Fallo "no enc
 $rama = & git -C $RutaSmartBacklog rev-parse --abbrev-ref HEAD 2>$null
 $numero = & gcloud projects describe $Proyecto --format="value(projectNumber)" 2>$null
 if (-not $numero) { Fallo "no tengo acceso al proyecto $Proyecto con $cuenta." }
+$SaRun = "$numero-compute@developer.gserviceaccount.com"
 $listaTesters = @($Testers -split "[,; ]+" | Where-Object { $_ -match "^[^@\s]+@[^@\s]+\.[^@\s]+$" } | ForEach-Object { $_.ToLower() } | Select-Object -Unique)
 if ($Testers -and $listaTesters.Count -eq 0) { Fallo "-Testers no tiene correos válidos." }
 # Quien despliega también entra a Ruta de historias con su propio usuario.
@@ -118,12 +129,12 @@ $sqlExiste = Existe sql instances describe $Sql
 Write-Host "Cuenta:            $cuenta"
 Write-Host "Proyecto:          $Proyecto ($numero), región $Region"
 Write-Host "SmartBacklogIA:    $RutaSmartBacklog (rama $rama)"
-Write-Host "Acceso:            $Acceso"
+Write-Host "Cuenta de servicio: $SaRun"
 Write-Host "Usuarios:          $($listaTesters -join ', ')"
 Write-Host ""
 Write-Host "Se va a crear o actualizar:" -ForegroundColor Yellow
-Write-Host "  - APIs, repositorio de imágenes '$Ar', cuentas sa-hu-flujo y sa-smartbacklog con sus permisos"
-Write-Host "  - Lectura y escritura de sa-hu-flujo en gs://$Bucket (sube documentos y guarda resultados en salidas_hu/)"
+Write-Host "  - APIs, repositorio de imágenes '$Ar' y secretos en Secret Manager (sin cambios de permisos IAM)"
+Write-Host "  - Los servicios usan la cuenta de Compute: leen y escriben en gs://$Bucket (documentos y salidas_hu/)"
 if (-not $sqlExiste) {
     Write-Host "  - Cloud SQL '$Sql' PostgreSQL 16, db-f1-micro, 10 GB. COSTO FIJO aprox. 8-10 USD/mes mientras exista." -ForegroundColor Yellow
 }
@@ -139,32 +150,12 @@ if (-not $SinConfirmar) {
 Paso "APIs"
 $apis = @("run.googleapis.com", "cloudbuild.googleapis.com", "artifactregistry.googleapis.com", "sqladmin.googleapis.com",
           "secretmanager.googleapis.com", "aiplatform.googleapis.com", "iam.googleapis.com")
-if ($Acceso -eq "iap") { $apis += "iap.googleapis.com" }
 G services enable @apis
 
 Paso "Repositorio de imágenes"
 if (-not (Existe artifacts repositories describe $Ar --location=$Region)) {
     G artifacts repositories create $Ar --repository-format=docker --location=$Region --description="Ruta de historias y SmartBacklogIA"
 }
-# Cloud Build construye con la cuenta de servicio de Compute por defecto en proyectos recientes.
-$saBuild = "$numero-compute@developer.gserviceaccount.com"
-G artifacts repositories add-iam-policy-binding $Ar --location=$Region --member="serviceAccount:$saBuild" --role=roles/artifactregistry.writer | Out-Null
-foreach ($rol in @("roles/logging.logWriter", "roles/storage.objectViewer")) {
-    G projects add-iam-policy-binding $Proyecto --member="serviceAccount:$saBuild" --role=$rol --condition=None | Out-Null
-}
-
-Paso "Cuentas de servicio y permisos"
-foreach ($sa in @(@("sa-hu-flujo", "Ruta de historias (Cloud Run)"), @("sa-smartbacklog", "SmartBacklogIA (Cloud Run)"))) {
-    if (-not (Existe iam service-accounts describe "$($sa[0])@$Proyecto.iam.gserviceaccount.com")) {
-        G iam service-accounts create $sa[0] --display-name="$($sa[1])"
-    }
-}
-foreach ($sa in @($SaHu, $SaSb)) {
-    G projects add-iam-policy-binding $Proyecto --member="serviceAccount:$sa" --role=roles/aiplatform.user --condition=None | Out-Null
-}
-G projects add-iam-policy-binding $Proyecto --member="serviceAccount:$SaSb" --role=roles/cloudsql.client --condition=None | Out-Null
-G storage buckets add-iam-policy-binding "gs://$Bucket" --member="serviceAccount:$SaHu" --role=roles/storage.objectAdmin | Out-Null
-G storage buckets add-iam-policy-binding "gs://$Bucket" --member="serviceAccount:$SaSb" --role=roles/storage.objectViewer | Out-Null
 
 # ------------------------------------------------------------------ base de datos y secretos
 Paso "Cloud SQL (la primera vez tarda 5-10 minutos)"
@@ -174,7 +165,7 @@ if (-not $sqlExiste) {
 }
 $conexion = "$($Proyecto):$($Region):$Sql"
 if (-not (Existe sql databases describe spb --instance=$Sql)) { G sql databases create spb --instance=$Sql }
-if (-not (LeerSecreto "sbia-database-url")) {
+if (-not $Estado["db_password"]) {
     $pg = NuevaClave 24
     $hayUsuario = & gcloud sql users list --instance=$Sql --project=$Proyecto --format="value(name)" 2>$null | Where-Object { $_ -eq "spb" }
     if ($hayUsuario) {
@@ -182,13 +173,18 @@ if (-not (LeerSecreto "sbia-database-url")) {
     } else {
         G sql users create spb --instance=$Sql --password=$pg
     }
-    GuardarSecreto "sbia-database-url" "postgresql+psycopg://spb:$pg@/spb?host=/cloudsql/$conexion" @($SaSb)
+    GuardarSecreto "sbia-database-url" "postgresql+psycopg://spb:$pg@/spb?host=/cloudsql/$conexion"
+    $Estado["db_password"] = $pg; GuardarEstado
 }
 
 Paso "Secretos de SmartBacklogIA"
-if (-not (LeerSecreto "sbia-session-secret")) { GuardarSecreto "sbia-session-secret" (NuevaClave 48) @($SaSb) }
-$adminPass = LeerSecreto "sbia-admin-password"
-if (-not $adminPass) { $adminPass = NuevaClave 16; GuardarSecreto "sbia-admin-password" $adminPass @($SaSb) }
+if (-not $Estado["session_secret"]) {
+    $Estado["session_secret"] = NuevaClave 48; GuardarSecreto "sbia-session-secret" $Estado["session_secret"]; GuardarEstado
+}
+if (-not $Estado["admin_password"]) {
+    $Estado["admin_password"] = NuevaClave 16; GuardarSecreto "sbia-admin-password" $Estado["admin_password"]; GuardarEstado
+}
+$adminPass = $Estado["admin_password"]
 
 # ------------------------------------------------------------------ SmartBacklogIA
 Paso "Imagen de SmartBacklogIA (Cloud Build)"
@@ -206,42 +202,47 @@ EnvYaml $envSb @{
 $secretosSb = "DATABASE_URL=sbia-database-url:latest,SESSION_SECRET=sbia-session-secret:latest,SEED_ADMIN_PASSWORD=sbia-admin-password:latest"
 
 Paso "Servicio smartbacklog"
-Desplegar "smartbacklog" @("--image=$ImgSb", "--service-account=$SaSb", "--add-cloudsql-instances=$conexion",
+G run deploy smartbacklog @("--image=$ImgSb", "--service-account=$SaRun", "--region=$Region", "--add-cloudsql-instances=$conexion",
     "--env-vars-file=$envSb", "--set-secrets=$secretosSb", "--memory=1Gi", "--cpu=1", "--no-cpu-throttling",
     "--min-instances=0", "--max-instances=2", "--timeout=900")
 $urlSb = & gcloud run services describe smartbacklog --region=$Region --project=$Proyecto --format="value(status.url)"
 
 Paso "Admin de SmartBacklogIA (job de seed)"
-G run jobs deploy smartbacklog-seed --image=$ImgSb --region=$Region --service-account=$SaSb `
+G run jobs deploy smartbacklog-seed --image=$ImgSb --region=$Region --service-account=$SaRun `
     --set-cloudsql-instances=$conexion --env-vars-file=$envSb --set-secrets=$secretosSb `
     --command=sh --args="-c,alembic upgrade head && python scripts/seed.py" --max-retries=0 --task-timeout=600
 G run jobs execute smartbacklog-seed --region=$Region --wait
+
+Paso "Acceso público a smartbacklog (Cloud Build como la cuenta de Compute)"
+if (-not (EsPublico "$urlSb/health")) { AbrirAlPublico @("smartbacklog") }
+if (-not (EsPublico "$urlSb/health")) {
+    Fallo "smartbacklog sigue privado. La organización puede estar bloqueando el acceso público a Cloud Run."
+}
 
 Paso "Conexión del puente (API key de servicio)"
 $sesion = $null
 try {
     Invoke-RestMethod -Method Post "$urlSb/api/v1/auth/login" -ContentType "application/json" -SessionVariable sesion `
         -Body (@{ email = "admin@spb.local"; password = $adminPass } | ConvertTo-Json) | Out-Null
-} catch { Fallo "no pude iniciar sesión como admin en $urlSb : $($_.Exception.Message)" }
-if (-not (LeerSecreto "sbia-api-key")) {
+} catch { Fallo "no pude iniciar sesión como admin en $urlSb : $($_.Exception.Message). Si perdiste deploy\estado_despliegue.json, la clave del admin ya no coincide." }
+if (-not $Estado["api_key"]) {
     $k = Invoke-RestMethod -Method Post "$urlSb/api/v1/admin/api-keys" -WebSession $sesion -ContentType "application/json" `
         -Body (@{ name = "hu-flujo-$Tag" } | ConvertTo-Json)
-    GuardarSecreto "sbia-api-key" $k.api_key @($SaHu)
+    $Estado["api_key"] = $k.api_key; GuardarEstado
+    GuardarSecreto "sbia-api-key" $Estado["api_key"]
 }
 
 # ------------------------------------------------------------------ testers
 Paso "Usuarios de prueba"
 $claves = [ordered]@{}
-$prev = LeerSecreto "hu-usuarios"
-if ($prev) {
-    foreach ($par in ($prev -split ";")) { if ($par -match "^([^:]+):(.+)$") { $claves[$matches[1]] = $matches[2] } }
-}
+if ($Estado["usuarios"]) { foreach ($p in $Estado["usuarios"].PSObject.Properties) { $claves[$p.Name] = $p.Value } }
 $nuevos = @()
 foreach ($t in $listaTesters) {
     if (-not $claves.Contains($t)) { $claves[$t] = NuevaClave 14; $nuevos += $t }
 }
-if ($claves.Count) {
-    GuardarSecreto "hu-usuarios" ((($claves.GetEnumerator() | ForEach-Object { "$($_.Key):$($_.Value)" }) -join ";")) @($SaHu)
+$Estado["usuarios"] = [pscustomobject]$claves; GuardarEstado
+if ($nuevos.Count -or -not (Existe secrets describe "hu-usuarios")) {
+    GuardarSecreto "hu-usuarios" ((($claves.GetEnumerator() | ForEach-Object { "$($_.Key):$($_.Value)" }) -join ";"))
 }
 foreach ($t in $nuevos) {
     $nombre = ($t -split "@")[0]
@@ -252,7 +253,7 @@ foreach ($t in $nuevos) {
     } catch { Write-Host "  $t ya existía en SmartBacklogIA: conserva la clave que tenía allá." -ForegroundColor Yellow }
 }
 if ($claves.Count) {
-    $apiKey = LeerSecreto "sbia-api-key"
+    $apiKey = $Estado["api_key"]
     $miembros = @($claves.Keys | ForEach-Object { @{ email = $_; role = "product_owner" } })
     $cuerpo = @{ key = $ClaveSbia; name = "SINCHI (desde Ruta de historias)"; members = $miembros } | ConvertTo-Json -Depth 4
     try {
@@ -277,27 +278,19 @@ EnvYaml $envHu @{
     GOOGLE_GENAI_USE_VERTEXAI = "TRUE"; ADK_MODEL = "gemini-2.5-flash"; ADK_SESSION_URI = "memory://"
     SBIA_URL = $urlSb; SBIA_CLAVES = "SERVI_SINCHI=$ClaveSbia"
 }
-$secretosHu = "SBIA_API_KEY=sbia-api-key:latest"
-if ($Acceso -eq "clave") { $secretosHu += ",HU_USUARIOS=hu-usuarios:latest" }
+$secretosHu = "SBIA_API_KEY=sbia-api-key:latest,HU_USUARIOS=hu-usuarios:latest"
 # max-instances=1: los análisis corren en segundo plano dentro del proceso y el estado usa bloqueos en memoria.
-$opcionesHu = @("--image=$ImgHu", "--service-account=$SaHu", "--env-vars-file=$envHu", "--set-secrets=$secretosHu",
+$opcionesHu = @("--image=$ImgHu", "--service-account=$SaRun", "--region=$Region", "--env-vars-file=$envHu", "--set-secrets=$secretosHu",
     "--memory=2Gi", "--cpu=1", "--no-cpu-throttling", "--min-instances=0", "--max-instances=1",
     "--concurrency=40", "--timeout=3600")
 
 Paso "Servicio hu-flujo"
-if ($Acceso -eq "iap") {
-    & gcloud beta services identity create --service=iap.googleapis.com --project=$Proyecto 2>$null | Out-Null
-    G run deploy hu-flujo @opcionesHu --region=$Region --no-allow-unauthenticated --iap
-    G run services add-iam-policy-binding hu-flujo --region=$Region `
-        --member="serviceAccount:service-$numero@gcp-sa-iap.iam.gserviceaccount.com" --role=roles/run.invoker | Out-Null
-    foreach ($t in $listaTesters) {
-        G iap web add-iam-policy-binding --resource-type=cloud-run --service=hu-flujo --region=$Region `
-            --member="user:$t" --role=roles/iap.httpsResourceAccessor | Out-Null
-    }
-} else {
-    Desplegar "hu-flujo" $opcionesHu
-}
+G run deploy hu-flujo @opcionesHu
 $urlHu = & gcloud run services describe hu-flujo --region=$Region --project=$Proyecto --format="value(status.url)"
+if (-not (EsPublico "$urlHu/flujo")) { AbrirAlPublico @("hu-flujo") }
+if (-not (EsPublico "$urlHu/flujo")) {
+    Fallo "hu-flujo sigue privado. La organización puede estar bloqueando el acceso público a Cloud Run."
+}
 
 # ------------------------------------------------------------------ resumen
 Paso "Listo"
@@ -305,13 +298,13 @@ $archivo = Join-Path $Repo "deploy\credenciales_pruebas.csv"
 $filas = @("servicio,url,usuario,clave")
 $filas += "smartbacklog (admin),$urlSb,admin@spb.local,$adminPass"
 foreach ($e in $claves.GetEnumerator()) {
-    if ($Acceso -eq "clave") { $filas += "hu-flujo,$urlHu/flujo,$($e.Key),$($e.Value)" }
-    else { $filas += "hu-flujo,$urlHu/flujo,$($e.Key),(cuenta de Google)" }
+    $filas += "hu-flujo,$urlHu/flujo,$($e.Key),$($e.Value)"
     $filas += "smartbacklog,$urlSb,$($e.Key),$($e.Value)"
 }
 Texto $archivo (($filas -join "`r`n") + "`r`n")
 Write-Host "Ruta de historias:  $urlHu/flujo" -ForegroundColor Green
 Write-Host "SmartBacklogIA:     $urlSb" -ForegroundColor Green
 Write-Host "Credenciales en:    $archivo  (compártelas por un canal privado; el archivo no se sube a git)"
+Write-Host "Estado (consérvalo): $EstadoArchivo"
 if ($nuevos.Count) { Write-Host "Testers nuevos:     $($nuevos -join ', ')" }
 Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue

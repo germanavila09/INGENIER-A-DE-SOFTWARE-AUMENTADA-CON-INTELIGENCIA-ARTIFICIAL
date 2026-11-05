@@ -37,6 +37,6 @@ switch ($Accion) {
             G secrets delete $s
         }
         G artifacts repositories delete ruta-historias --location=$Region
-        Write-Host "Listo. Las cuentas de servicio sa-hu-flujo y sa-smartbacklog se conservan (no cuestan)."
+        Write-Host "Listo. El bucket y la cuenta de Compute no se tocan."
     }
 }

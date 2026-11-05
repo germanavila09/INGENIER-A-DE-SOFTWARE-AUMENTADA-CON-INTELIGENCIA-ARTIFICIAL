@@ -202,7 +202,7 @@ Detalle en [docs/integracion_smartbacklog.md](docs/integracion_smartbacklog.md).
 ## Despliegue para pruebas con otras personas
 
 `deploy\desplegar_gcp.ps1` publica Ruta de historias y SmartBacklogIA en Cloud Run (`servi-modelos-ia-dev`), con
-usuario y clave por tester (o cuentas de Google con IAP). Detalle, costos y cómo pausar en [deploy/README.md](deploy/README.md).
+usuario y clave por tester. Detalle, costos y cómo pausar en [deploy/README.md](deploy/README.md).
 
 ## Pruebas
 

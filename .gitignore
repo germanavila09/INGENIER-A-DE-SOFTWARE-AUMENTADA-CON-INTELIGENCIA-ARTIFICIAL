@@ -33,3 +33,4 @@ Thumbs.db
 
 # Credenciales que genera deploy/desplegar_gcp.ps1
 deploy/credenciales_pruebas.csv
+deploy/estado_despliegue.json
