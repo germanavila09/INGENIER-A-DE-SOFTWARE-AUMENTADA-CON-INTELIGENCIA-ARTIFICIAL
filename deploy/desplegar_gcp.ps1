@@ -174,16 +174,19 @@ if (Existe compute networks describe default) {
         G compute networks subnets create $Subred --network=$Red --region=$Region --range=10.20.0.0/24 --enable-private-ip-google-access
     }
 }
-$Rango = "ruta-sql-psa"
-if (-not (Existe compute addresses describe $Rango --global)) {
-    G compute addresses create $Rango --global --purpose=VPC_PEERING --prefix-length=20 --network=$Red `
-        --description="Rango para Cloud SQL con IP privada (Ruta de historias)"
-}
+# Si la red ya tiene acceso privado a servicios (otra base del proyecto lo configuró), se reutiliza tal cual:
+# modificar esa conexión exige servicenetworking.services.addPeering, que el rol Editor no tiene.
 $conectado = & gcloud services vpc-peerings list --network=$Red --project=$Proyecto --format="value(reservedPeeringRanges)" 2>$null
-if (-not $conectado) {
+if ($conectado) {
+    $Rango = (($conectado -join ";") -split "[;,]" | Where-Object { $_ } | Select-Object -First 1).Trim()
+    Write-Host "  La red $Red ya tiene acceso privado a servicios; uso su rango $Rango."
+} else {
+    $Rango = "ruta-sql-psa"
+    if (-not (Existe compute addresses describe $Rango --global)) {
+        G compute addresses create $Rango --global --purpose=VPC_PEERING --prefix-length=20 --network=$Red `
+            --description="Rango para Cloud SQL con IP privada (Ruta de historias)"
+    }
     G services vpc-peerings connect --service=servicenetworking.googleapis.com --ranges=$Rango --network=$Red
-} elseif ($conectado -notmatch $Rango) {
-    G services vpc-peerings update --service=servicenetworking.googleapis.com --ranges="$(($conectado -split '[;,]') -join ','),$Rango" --network=$Red
 }
 $VpcRun = @("--network=$Red", "--subnet=$Subred", "--vpc-egress=private-ranges-only")
 
