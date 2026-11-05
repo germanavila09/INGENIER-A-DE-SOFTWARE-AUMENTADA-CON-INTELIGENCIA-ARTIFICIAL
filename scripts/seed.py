@@ -2,7 +2,8 @@
 
 Uso (con la base ya migrada/creada):
     python scripts/seed.py
-Variables: SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD (por defecto admin@spb.local / cambiar-me-ya).
+Variables: SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD (por defecto admin@spb.local / cambiar-me-ya),
+SEED_DEMO (true/false) y SEED_DEMO_PASSWORD (clave de los usuarios demo; por defecto demo-spb-2026).
 """
 
 import os
@@ -81,11 +82,17 @@ def main() -> None:
             db.add(User(email=admin_email, name="Administrador", is_admin=True, password_hash=hash_password(admin_pass)))
             print(f"Admin creado: {admin_email}")
 
+        # En un servidor público: SEED_DEMO=false (sin usuarios ni proyecto demo) o SEED_DEMO_PASSWORD propia.
+        if os.getenv("SEED_DEMO", "true").strip().lower() in ("0", "false", "no"):
+            db.commit()
+            print("Datos demo omitidos (SEED_DEMO=false)")
+            return
+        demo_pass = os.getenv("SEED_DEMO_PASSWORD", "demo-spb-2026")
         users = {}
         for email, name, _ in DEMO_USERS:
             user = db.scalar(select(User).where(User.email == email))
             if user is None:
-                user = User(email=email, name=name, password_hash=hash_password("demo-spb-2026"))
+                user = User(email=email, name=name, password_hash=hash_password(demo_pass))
                 db.add(user)
                 db.flush()
             users[email] = user

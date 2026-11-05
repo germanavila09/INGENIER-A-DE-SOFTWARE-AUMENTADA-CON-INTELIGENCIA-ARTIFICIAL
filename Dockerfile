@@ -14,4 +14,5 @@ COPY app ./app
 COPY scripts ./scripts
 
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# PORT lo define Cloud Run; en docker compose queda 8000. --proxy-headers: Cloud Run termina HTTPS delante.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*"]

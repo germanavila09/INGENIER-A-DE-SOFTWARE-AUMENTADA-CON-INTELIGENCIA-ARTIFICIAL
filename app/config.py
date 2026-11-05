@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://spb:spb@localhost:5432/spb"
     session_secret: str = "cambiar-en-produccion"
+    session_https_only: bool = False  # true en Cloud Run: la cookie de sesión solo viaja por HTTPS
     adk_webhook_url: str | None = None
 
     # Agentes (ver app/agents). provider: none | stub | adk

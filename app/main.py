@@ -33,7 +33,8 @@ app = FastAPI(
         "Flujo ADK: ingest/projects → stories:bulk → refinements (list, claim, result)."
     ),
 )
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, same_site="lax", max_age=60 * 60 * 12)
+app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, same_site="lax", max_age=60 * 60 * 12,
+                   https_only=settings.session_https_only)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 app.include_router(auth.router)
