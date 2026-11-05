@@ -233,9 +233,11 @@ EnvYaml $envSb @{
 $secretosSb = "DATABASE_URL=sbia-database-url:latest,SESSION_SECRET=sbia-session-secret:latest,SEED_ADMIN_PASSWORD=sbia-admin-password:latest"
 
 Paso "Servicio smartbacklog"
-G run deploy smartbacklog @VpcRun @("--image=$ImgSb", "--service-account=$SaRun", "--region=$Region",
+# Windows PowerShell 5.1 no expande un arreglo literal pasado a una función: se usa una variable.
+$opcionesSb = @("--image=$ImgSb", "--service-account=$SaRun", "--region=$Region",
     "--env-vars-file=$envSb", "--set-secrets=$secretosSb", "--memory=1Gi", "--cpu=1", "--no-cpu-throttling",
     "--min-instances=0", "--max-instances=2", "--timeout=900")
+G run deploy smartbacklog @VpcRun @opcionesSb
 $urlSb = & gcloud run services describe smartbacklog --region=$Region --project=$Proyecto --format="value(status.url)"
 
 Paso "Admin de SmartBacklogIA (job de seed)"
