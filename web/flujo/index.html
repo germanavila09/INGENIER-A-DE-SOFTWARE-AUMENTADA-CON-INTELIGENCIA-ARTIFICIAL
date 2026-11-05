@@ -47,6 +47,7 @@ header { display: flex; align-items: center; gap: 20px; padding: 14px 28px; bord
 .campo { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta-2); }
 .campo select, .campo input { background: var(--papel-2); border: 1px solid var(--linea); border-radius: 4px; padding: 6px 9px; color: var(--tinta); min-width: 0; }
 .campo input { width: 150px; }
+.campo input[readonly] { border-style: dashed; color: var(--tinta-2); }
 .icono { background: none; border: 1px solid var(--linea); border-radius: 4px; padding: 6px 10px; cursor: pointer; color: var(--tinta-2); font-size: 13px; }
 
 /* ---------- distribución */
@@ -157,7 +158,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 textarea { width: 100%; background: var(--papel-2); border: 1px solid var(--linea); border-radius: 4px; padding: 8px 10px; resize: vertical; }
 
 /* documentos */
-.soltar { border: 2px dashed var(--linea); padding: 22px; text-align: center; color: var(--tinta-2); cursor: pointer; max-width: 640px; }
+.soltar { display: block; border: 2px dashed var(--linea); padding: 22px; text-align: center; color: var(--tinta-2); cursor: pointer; max-width: 640px; }
 .soltar.sobre { border-color: var(--agua); color: var(--agua); background: var(--agua-suave); }
 
 /* avance del análisis: es una secuencia */
@@ -721,6 +722,12 @@ $('#dlg-estimar').addEventListener('close', async () => {
 (async () => {
   const tema = guardar('ruta.tema'); if (tema) document.documentElement.dataset.theme = tema;
   $('#usuario').value = guardar('ruta.usuario') || '';
+  try {
+    const yo = await pedir('/yo');
+    if (yo.usuario) {   // acceso con usuario o con cuenta de Google: firma el servidor, no el campo
+      const u = $('#usuario'); u.value = yo.usuario; u.readOnly = true; u.title = 'Sesión iniciada como ' + yo.usuario;
+    }
+  } catch (e) { /* servidor anterior sin /api/yo: se mantiene el campo libre */ }
   const v = guardar('ruta.vista'); if (v && (ETAPAS.some(e => e.id === v) || v === 'sbia')) S.vista = v;
   try { await cargarProyectos(); } catch (e) { $('#vista').innerHTML = `<div class="aviso error"><b>No se pudo leer la lista de proyectos.</b> ${esc(e.message)}</div>`; return; }
   await cargarTodo();

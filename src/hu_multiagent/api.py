@@ -702,3 +702,10 @@ def sbia_publicar(project_id: str, body: Publicacion | None = None, x_usuario: s
                             usuario=_usuario(x_usuario))
     except SmartBacklogError as exc:
         raise _sbia_http(exc) from exc
+
+
+@router.get("/yo")
+def quien_soy(x_usuario: str | None = Header(None), x_acceso: str | None = Header(None)) -> dict:
+    """Identidad con la que se firman las decisiones. Si el acceso no es «abierto», la fija el servidor."""
+    acceso = x_acceso or "abierto"
+    return {"acceso": acceso, "usuario": _usuario(x_usuario) if acceso != "abierto" else None}

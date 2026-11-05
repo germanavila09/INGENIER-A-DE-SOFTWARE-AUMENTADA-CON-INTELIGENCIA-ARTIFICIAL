@@ -1,0 +1,12 @@
+# Lo que NO se sube a Cloud Build (además de lo que ignora git).
+#!include:.gitignore
+.git
+.venv
+salidas_hu
+data
+docs_ejemplo
+*.bundle
+*.docx
+*.pdf
+*.xlsx
+deploy/credenciales_pruebas.csv

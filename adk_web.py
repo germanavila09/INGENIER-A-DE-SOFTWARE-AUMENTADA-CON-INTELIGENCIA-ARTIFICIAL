@@ -111,7 +111,8 @@ def verificar_entorno() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="ADK Web con el agente del bucket")
     parser.add_argument("--host", default=os.getenv("ADK_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("ADK_PORT", "8000")))
+    # PORT lo define Cloud Run; ADK_PORT es el del .env local.
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT") or os.getenv("ADK_PORT", "8000")))
     parser.add_argument("--no-browser", action="store_true", help="no abrir el navegador")
     parser.add_argument("--skip-checks", action="store_true", help="omitir la verificación inicial")
     args = parser.parse_args()
@@ -175,6 +176,11 @@ def crear_app(host: str = "127.0.0.1", port: int = 8000, lifespan=None, **kwargs
     opciones.update(kwargs)
     app = get_fast_api_app(agents_dir=str(AGENTS_DIR), web=True, host=host, port=port, lifespan=lifespan, **opciones)
     app.include_router(spb_api)
+
+    # Acceso para publicar a otras personas (HU_ACCESO=abierto|clave|iap; ver hu_multiagent/acceso.py).
+    from hu_multiagent.acceso import AccesoMiddleware
+
+    app.add_middleware(AccesoMiddleware)
 
     @app.get("/spb", include_in_schema=False)
     def spb():

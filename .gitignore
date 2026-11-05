@@ -30,3 +30,6 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Credenciales que genera deploy/desplegar_gcp.ps1
+deploy/credenciales_pruebas.csv

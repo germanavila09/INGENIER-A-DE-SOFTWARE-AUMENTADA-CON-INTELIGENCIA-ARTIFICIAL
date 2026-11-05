@@ -199,6 +199,11 @@ ahí y se aprueban allá. Las historias aprobadas se publican con su estimación
 SmartBacklogIA no se pisa. Configura `SBIA_URL`, `SBIA_API_KEY` y `SBIA_CLAVES` en `.env`.
 Detalle en [docs/integracion_smartbacklog.md](docs/integracion_smartbacklog.md).
 
+## Despliegue para pruebas con otras personas
+
+`deploy\desplegar_gcp.ps1` publica Ruta de historias y SmartBacklogIA en Cloud Run (`servi-modelos-ia-dev`), con
+usuario y clave por tester (o cuentas de Google con IAP). Detalle, costos y cómo pausar en [deploy/README.md](deploy/README.md).
+
 ## Pruebas
 
 ```bash
