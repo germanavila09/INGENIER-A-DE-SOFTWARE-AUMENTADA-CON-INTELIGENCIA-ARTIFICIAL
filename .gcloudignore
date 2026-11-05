@@ -1,0 +1,18 @@
+# Lo que NO se sube a Cloud Build. No se incluye .gitignore: su patrón «documents/*» también
+# excluiría app/services/documents/ (el código de las fuentes de documentos).
+.git
+.gitignore
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+secrets/
+cookies.txt
+*.db
+.claude/
+CLAUDE.md
+*.bundle
+/documents/
+/tests/
