@@ -8,7 +8,7 @@
     - Repositorio de imágenes «ruta-historias» en Artifact Registry.
     - Los dos servicios corren con la cuenta de servicio de Compute por defecto del proyecto, que ya tiene
       Vertex AI, Storage, Secret Manager y Cloud Run Admin: el script no asigna permisos IAM (basta el rol Editor).
-    - Cloud SQL PostgreSQL 16 «spb-pg» (db-f1-micro, 10 GB) para SmartBacklogIA.
+    - Cloud SQL PostgreSQL 16 «spb-psc» (db-f1-micro, 10 GB, sin IP pública; endpoint Private Service Connect).
     - Secretos: clave de sesión y de admin de SmartBacklogIA, URL de la base, API key del puente y usuarios de prueba.
     - Servicios Cloud Run «smartbacklog» y «hu-flujo», y el job «smartbacklog-seed» (crea el admin).
     - Usuarios de prueba en los dos servicios y proyecto SINCHIHU en SmartBacklogIA con ellos como miembros.
@@ -42,7 +42,7 @@ param(
 $ErrorActionPreference = "Continue"
 $Repo = Split-Path -Parent $PSScriptRoot
 $Ar = "ruta-historias"
-$Sql = "spb-pg"
+$Sql = "spb-psc"
 $Acceso = "clave"
 $EstadoArchivo = Join-Path $Repo "deploy\estado_despliegue.json"
 $Tag = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -137,7 +137,7 @@ Write-Host "  - APIs, repositorio de imágenes '$Ar' y secretos en Secret Manage
 Write-Host "  - Los servicios usan la cuenta de Compute: leen y escriben en gs://$Bucket (documentos y salidas_hu/)"
 if (-not $sqlExiste) {
     Write-Host "  - Cloud SQL '$Sql' PostgreSQL 16, db-f1-micro, 10 GB, solo IP privada. COSTO FIJO aprox. 8-10 USD/mes mientras exista." -ForegroundColor Yellow
-    Write-Host "  - Red privada: rango reservado para Cloud SQL en la VPC (default o una nueva 'ruta-vpc') y conexión de servicios" -ForegroundColor Yellow
+    Write-Host "  - Red privada: endpoint Private Service Connect 'ruta-sql-psc' (IP interna en la subred) hacia Cloud SQL" -ForegroundColor Yellow
 }
 Write-Host "  - Imágenes con Cloud Build y servicios Cloud Run 'smartbacklog' y 'hu-flujo' (costo por uso; 0 sin tráfico)"
 Write-Host "  - Gemini (Vertex AI) se cobra por uso cada vez que alguien analiza o genera historias"
@@ -160,8 +160,9 @@ if (-not (Existe artifacts repositories describe $Ar --location=$Region)) {
 }
 
 # ------------------------------------------------------------------ red privada
-# La organización prohíbe IP pública en Cloud SQL (constraints/sql.restrictPublicIp): la base solo tiene IP
-# privada en una VPC, y Cloud Run llega a ella con salida directa a la VPC (Direct VPC egress).
+# La organización prohíbe IP pública en Cloud SQL (constraints/sql.restrictPublicIp) y el acceso privado a servicios
+# de la red ya no tiene rangos libres (ampliarlo exige permisos que Editor no tiene). Por eso la base se publica con
+# Private Service Connect: un endpoint con IP interna en la subred, y Cloud Run llega con Direct VPC egress.
 Paso "Red privada para la base de datos"
 if (Existe compute networks describe default) {
     $Red = "default"
@@ -174,32 +175,26 @@ if (Existe compute networks describe default) {
         G compute networks subnets create $Subred --network=$Red --region=$Region --range=10.20.0.0/24 --enable-private-ip-google-access
     }
 }
-# Si la red ya tiene acceso privado a servicios (otra base del proyecto lo configuró), se reutiliza tal cual:
-# modificar esa conexión exige servicenetworking.services.addPeering, que el rol Editor no tiene.
-$conectado = & gcloud services vpc-peerings list --network=$Red --project=$Proyecto --format="value(reservedPeeringRanges)" 2>$null
-if ($conectado) {
-    $Rango = (($conectado -join ";") -split "[;,]" | Where-Object { $_ } | Select-Object -First 1).Trim()
-    Write-Host "  La red $Red ya tiene acceso privado a servicios; uso su rango $Rango."
-} else {
-    $Rango = "ruta-sql-psa"
-    if (-not (Existe compute addresses describe $Rango --global)) {
-        G compute addresses create $Rango --global --purpose=VPC_PEERING --prefix-length=20 --network=$Red `
-            --description="Rango para Cloud SQL con IP privada (Ruta de historias)"
-    }
-    G services vpc-peerings connect --service=servicenetworking.googleapis.com --ranges=$Rango --network=$Red
-}
 $VpcRun = @("--network=$Red", "--subnet=$Subred", "--vpc-egress=private-ranges-only")
 
 # ------------------------------------------------------------------ base de datos y secretos
-Paso "Cloud SQL con IP privada (la primera vez tarda 5-10 minutos)"
+Paso "Cloud SQL privado con Private Service Connect (la primera vez tarda 5-10 minutos)"
 if (-not $sqlExiste) {
     G sql instances create $Sql --database-version=POSTGRES_16 --edition=ENTERPRISE --tier=db-f1-micro `
         --region=$Region --storage-size=10 --storage-type=HDD --storage-auto-increase --availability-type=zonal `
-        --no-assign-ip --network="projects/$Proyecto/global/networks/$Red"
-    # Sin --allocated-ip-range-name (solo en gcloud beta): Cloud SQL toma IP de los rangos ya conectados a la red.
+        --no-assign-ip --enable-private-service-connect --allowed-psc-projects=$Proyecto
 }
-$ipSql = & gcloud sql instances describe $Sql --project=$Proyecto --format="value(ipAddresses[0].ipAddress)" 2>$null
-if (-not $ipSql) { Fallo "la instancia $Sql no tiene IP privada." }
+$adjunto = & gcloud sql instances describe $Sql --project=$Proyecto --format="value(pscServiceAttachmentLink)" 2>$null
+if (-not $adjunto) { Fallo "la instancia $Sql no tiene Private Service Connect habilitado." }
+$Ep = "ruta-sql-psc"
+if (-not (Existe compute addresses describe $Ep --region=$Region)) {
+    G compute addresses create $Ep --region=$Region --subnet=$Subred --description="Endpoint PSC de Cloud SQL spb-psc"
+}
+if (-not (Existe compute forwarding-rules describe $Ep --region=$Region)) {
+    G compute forwarding-rules create $Ep --region=$Region --network=$Red --address=$Ep --target-service-attachment=$adjunto
+}
+$ipSql = & gcloud compute addresses describe $Ep --region=$Region --project=$Proyecto --format="value(address)" 2>$null
+if (-not $ipSql) { Fallo "el endpoint $Ep no tiene IP interna." }
 if (-not (Existe sql databases describe spb --instance=$Sql)) { G sql databases create spb --instance=$Sql }
 if (-not $Estado["db_password"] -or $Estado["db_ip"] -ne $ipSql) {
     $pg = if ($Estado["db_password"]) { $Estado["db_password"] } else { NuevaClave 24 }

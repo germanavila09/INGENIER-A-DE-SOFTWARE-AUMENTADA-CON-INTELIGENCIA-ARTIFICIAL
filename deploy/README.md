@@ -54,9 +54,10 @@ las siguientes ejecuciones lo necesitan.
   Corre con una sola instancia (los análisis se ejecutan en segundo plano dentro del proceso); deja la página
   abierta mientras un análisis está en curso.
 - Las decisiones las firma el usuario autenticado (`HU_ACCESO`), no el nombre escrito en el navegador.
-- La organización prohíbe IP pública en Cloud SQL (`constraints/sql.restrictPublicIp`): la base `spb-pg` solo tiene IP
-  privada en la VPC `default` (o una nueva `ruta-vpc`), con un rango reservado `ruta-sql-psa` y conexión de servicios.
-  `smartbacklog` y su job de seed llegan a ella con salida directa a la VPC (Direct VPC egress).
+- La organización prohíbe IP pública en Cloud SQL (`constraints/sql.restrictPublicIp`) y el acceso privado a
+  servicios de la red `default` no tiene rangos libres. Por eso la base `spb-psc` usa **Private Service Connect**:
+  un endpoint `ruta-sql-psc` con IP interna en la subred. `smartbacklog` y su job de seed llegan a ella con salida
+  directa a la VPC (Direct VPC egress).
 - `smartbacklog` usa Vertex AI con la cuenta de Compute y lee los documentos del bucket.
   Su admin (`admin@spb.local`) tiene una clave aleatoria guardada en Secret Manager (`sbia-admin-password`).
 - El puente usa una API key de servicio creada automáticamente (`sbia-api-key`).
