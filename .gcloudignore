@@ -8,6 +8,8 @@
 .pytest_cache/
 .ruff_cache/
 .env
+.env.gcp
+.env.local
 secrets/
 cookies.txt
 *.db

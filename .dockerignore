@@ -1,5 +1,7 @@
 # Entorno y secretos (nunca deben viajar al contexto de build)
 .env
+.env.gcp
+.env.local
 .venv/
 .claude/
 

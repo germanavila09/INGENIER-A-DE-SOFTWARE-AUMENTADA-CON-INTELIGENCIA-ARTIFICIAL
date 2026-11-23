@@ -5,7 +5,7 @@ import pytest
 from app.config import settings
 from app.services import context_graph, finops, nfr
 from app.services.finops import StoryInput
-from tests.conftest import INGEST_PAYLOAD, login
+from tests.conftest import INGEST_PAYLOAD, login, hitl_approve_all
 
 GRAPH = {
     "nodes": [
@@ -208,6 +208,7 @@ def test_sizing_with_graph_flags_violation_blocks_stage_3_until_waived(ctx_demo,
     events = [e["event_type"] for e in c.get("/api/v1/projects/DEMO/stories/DEMO-2/events").json()]
     assert "constraint_violations" in events
 
+    hitl_approve_all(c)
     for n in (1, 2):
         assert c.post(f"/api/v1/projects/DEMO/pipeline/{n}/approve", json={}).status_code == 200
     blocked = c.post("/api/v1/projects/DEMO/pipeline/3/approve", json={})

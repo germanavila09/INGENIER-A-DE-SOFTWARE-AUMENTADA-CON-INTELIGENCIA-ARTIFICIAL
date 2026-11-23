@@ -107,3 +107,21 @@ INGEST_PAYLOAD = {
     ],
     "stories": [{"external_id": "hu-2", "title": "Clasificar HU por IA", "type": "HU_IA"}],
 }
+
+
+def hitl_approve_all(client: TestClient, key: str = "DEMO") -> None:
+    """Revisa con el agente stub las HU sin revisión y las aprueba con la sesión actual (debe ser product owner).
+
+    La etapa 1 exige que cada HU activa tenga su revisión HITL aprobada (ver services/hitl.py).
+    """
+    from app.config import settings
+
+    saved = settings.agent_provider, settings.agent_execution
+    settings.agent_provider, settings.agent_execution = "stub", "inline"
+    try:
+        client.post(f"/api/v1/projects/{key}/hitl/review-pending")
+        for item in client.get(f"/api/v1/projects/{key}/hitl").json()["decidir"]:
+            res = client.post(f"/api/v1/projects/{key}/stories/{item['code']}/hitl/decision", json={"decision": "aprobar"})
+            assert res.status_code == 200, res.text
+    finally:
+        settings.agent_provider, settings.agent_execution = saved

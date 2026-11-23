@@ -12,7 +12,10 @@ from app.db import get_db
 from app.models import ApiKey, Project, User
 from app.agents.registry import provider_status
 from app.agents.runner import (
+    request_changes,
     start_backlog_sizing,
+    start_pending_reviews,
+    start_review,
     start_context_extraction,
     start_generation,
     start_generation_from_documents,
@@ -27,6 +30,7 @@ from app.security import generate_api_key, hash_api_key, hash_password
 from app.services import projects as project_service
 from app.services import stories as story_service
 from app.services import audit
+from app.services import hitl
 from app.services import context as context_service
 from app.services.access import Principal, actor_for, load_project, project_role, require_member
 from app.services.documents import SOURCE_LABELS, get_document_source, load_document_text
@@ -41,6 +45,9 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 # Markdown seguro: html desactivado, así que el HTML crudo se muestra escapado (sin XSS).
 _markdown = MarkdownIt("commonmark", {"html": False}).enable("table").enable("strikethrough")
 templates.env.filters["md"] = lambda text: Markup(_markdown.render(text)) if text else Markup("")
+# HITL en todas las pantallas del proyecto: contador de la bandeja en la barra lateral.
+templates.env.globals["hitl_pending"] = lambda project: len(hitl.inbox(project)["decidir"]) if project else 0
+templates.env.globals["hitl"] = hitl
 router = APIRouter(include_in_schema=False)
 
 BOARD_COLUMNS = ["borrador", "en_refinamiento", "refinada", "lista", "en_progreso", "en_revision", "hecha"]
@@ -661,3 +668,94 @@ def refine_submit(
         db.rollback()
         flash(request, exc.message, "error")
     return redirect(f"/p/{key}/stories/{code}")
+
+
+# ---------- revisión humana (HITL) ----------
+
+def _can_write(role: str | None, user: User) -> bool:
+    return role in ("product_owner", "scrum_master") or user.is_admin
+
+
+@router.get("/p/{key}/revision")
+def hitl_inbox(key: str, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    project, role = _project_for(db, key, user)
+    box = hitl.inbox(project)
+    stages = {s["stage_number"]: s for s in project_service.pipeline_out(db, project)}
+    db.commit()
+    return render(
+        request, "revision.html", user, project=project, role=role, box=box, stage1=stages[1],
+        blockers=hitl.stage1_blockers(project), can_write=_can_write(role, user), agent_status=provider_status(),
+        running=bool(box["en_curso"]) and any(r["state"]["key"] == "analizando" for r in box["en_curso"]),
+    )
+
+
+@router.post("/p/{key}/hitl/review-pending")
+def hitl_review_pending(key: str, request: Request, background: BackgroundTasks,
+                        user: User = Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        project, _role = _project_for(db, key, user, write=True)
+        run = start_pending_reviews(db, project, user_id=user.id, background=background)
+        flash(request, f"Revisión con agentes en curso para {run.input_ref}" if run.status in ("queued", "running")
+              else _review_message(run), "ok" if run.status != "failed" else "error")
+    except AppError as exc:
+        db.rollback()
+        flash(request, exc.message, "error")
+    return redirect(f"/p/{key}/revision")
+
+
+@router.post("/p/{key}/stories/{code}/hitl/review")
+def hitl_review_story(key: str, code: str, request: Request, background: BackgroundTasks, next: str = Form(""),
+                      user: User = Depends(current_user), db: Session = Depends(get_db)):
+    try:
+        project, _role = _project_for(db, key, user, write=True)
+        story = story_service.get_story(db, project, code)
+        run = start_review(db, project, [story], user_id=user.id, background=background)
+        flash(request, f"Revisando {code} con los agentes" if run.status in ("queued", "running")
+              else _review_message(run), "ok" if run.status != "failed" else "error")
+    except AppError as exc:
+        db.rollback()
+        flash(request, exc.message, "error")
+    return redirect(_back(next, f"/p/{key}/stories/{code}"))
+
+
+@router.post("/p/{key}/stories/{code}/hitl")
+def hitl_decide(
+    key: str, code: str, request: Request, background: BackgroundTasks,
+    decision: str = Form(...), comment: str = Form(""), apply_proposal: str = Form(""),
+    expected_version: str = Form(""), next: str = Form(""),
+    user: User = Depends(current_user), db: Session = Depends(get_db),
+):
+    try:
+        project, role = _project_for(db, key, user)
+        story = story_service.get_story(db, project, code)
+        version = _int(expected_version)
+        if decision == "aprobar_propuesta":
+            decision, apply_proposal = "aprobar", "1"
+        if decision == "pedir_cambios":
+            request_changes(db, project, story, user=user, role=role, comment=comment, expected_version=version,
+                            background=background)
+            message = f"{code}: cambios pedidos; el agente la refina y vuelve a revisión"
+        else:
+            hitl.decide(db, project, story, user=user, role=role, decision=decision, comment=_opt(comment),
+                        apply_proposal=bool(apply_proposal), expected_version=version)
+            db.commit()
+            message = f"{code}: {hitl.DECISIONS[decision].lower()}" + (" con la propuesta aplicada" if apply_proposal else "")
+        flash(request, message)
+    except (AppError, ValueError) as exc:
+        db.rollback()
+        flash(request, getattr(exc, "message", str(exc)), "error")
+    return redirect(_back(next, f"/p/{key}/revision"))
+
+
+def _back(next_url: str, default: str) -> str:
+    # Solo rutas internas del proyecto (evita redirecciones abiertas).
+    return next_url if next_url.startswith("/p/") and "//" not in next_url else default
+
+
+def _review_message(run) -> str:
+    if run.status == "failed":
+        return f"La revisión falló: {run.error}"
+    result = run.result or {}
+    levels = ", ".join(f"{r['story']} nivel {r['level']}" for r in result.get("reviewed", []))
+    failed = ", ".join(f["story"] for f in result.get("failed", []))
+    return f"Revisión terminada: {levels or 'sin HU'}" + (f". Fallaron: {failed}" if failed else "")

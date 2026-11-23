@@ -1,4 +1,4 @@
-from tests.conftest import INGEST_PAYLOAD, login
+from tests.conftest import INGEST_PAYLOAD, login, hitl_approve_all
 
 
 def ingest(client, key):
@@ -133,6 +133,10 @@ def test_hitl_pipeline_requires_previous_approval(client, service_key):
     login(client, "po@demo.co")
 
     assert client.post("/api/v1/projects/DEMO/pipeline/2/approve").status_code == 422
+    # HITL: sin revisión aprobada de cada HU, la etapa 1 no se aprueba
+    blocked = client.post("/api/v1/projects/DEMO/pipeline/1/approve")
+    assert blocked.status_code == 422 and "DEMO-1" in blocked.json()["detail"]
+    hitl_approve_all(client)
     assert client.post("/api/v1/projects/DEMO/pipeline/1/approve?summary=Revisado").status_code == 200
     assert client.post("/api/v1/projects/DEMO/pipeline/1/approve").status_code == 409
     assert client.post("/api/v1/projects/DEMO/pipeline/2/approve").status_code == 200

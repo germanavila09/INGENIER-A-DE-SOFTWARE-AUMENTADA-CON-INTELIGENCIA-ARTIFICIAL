@@ -9,7 +9,11 @@ Incluye:
 
 - Login, roles por proyecto y administración de usuarios y API keys.
 - Proyectos, épicas, HU con estado, asignación, auditoría y reportes (CSV/JSON).
-- Validación HITL obligatoria por etapa (1–5): no se aprueba una etapa sin aprobar la anterior.
+- **Revisión humana (HITL) de cada HU**: cuatro agentes (analista → arquitectura ∥ QA ∥ estimación) la revisan, una
+  política en código le asigna un nivel de riesgo 0/1/2 y una persona con el rol adecuado decide (aprobar, pedir cambios,
+  falta información, descartar). Bandeja en `/p/<CLAVE>/revision`; detalle en la sección «Revisión humana (HITL)».
+- Validación HITL obligatoria por etapa (1–5): no se aprueba una etapa sin aprobar la anterior. La etapa 1 exige además
+  que todas las HU activas estén aprobadas en la revisión humana.
 - Dimensionamiento con puntos de función, tamaño no funcional por restricciones (seguridad, privacidad, rendimiento...)
   con un grafo de contexto aprobado por una persona, y proyección FinOps del costo de generar el backlog con IA (sección 3.2.1).
 - Documentos de entrada desde una carpeta local **o** un bucket de Cloud Storage (sección 1.2).
@@ -61,9 +65,14 @@ y reglas: secciones 4.2 y 4.3.
    AGENT_DOCS_BUCKET=
    AGENT_DOCS_PREFIX=
    GCP_PROJECT=
-   # Agentes: stub = sin LLM (para probar el flujo); adk = Gemini
-   AGENT_PROVIDER=stub
+   # Agentes: stub = sin LLM (para probar el flujo); adk = Gemini con API key
+   AGENT_PROVIDER=adk
+   AGENT_MODEL=gemini-2.5-flash
+   GOOGLE_API_KEY=tu-clave-de-aistudio.google.com/apikey
+   GOOGLE_GENAI_USE_VERTEXAI=false
    ```
+   Este modo no necesita GCP: ni bucket, ni Vertex AI, ni credenciales de `gcloud`. En Windows,
+   `_ejecucion\configurar_local.ps1` deja el `.env` así y pide la API key sin mostrarla.
 2. **Documentos:** ponlos en `documents/<CLAVE>/`. El ejemplo `documents/PAGO/` ya existe. Docker monta `./documents`
    en `/data/documents` (solo lectura); no hace falta reconstruir al agregar archivos.
 3. **Levantar y cargar datos de demo:**
@@ -253,11 +262,41 @@ Para crear una API key: entra con el admin, luego `POST /api/v1/admin/api-keys` 
 | Rol | Puede |
 |---|---|
 | Admin del sistema | Todo; crear usuarios y API keys |
-| `product_owner` | Todo en el proyecto, incluida la aprobación HITL |
-| `scrum_master` | Crear y editar HU, asignar, mover estados, pedir refinamiento |
-| `developer` | Mover HU entre `lista` → `en_progreso` → `en_revision` (y regresar) |
-| `stakeholder` | Solo lectura |
-| Servicio ADK (API key) | Ingesta, crear HU, asignar, mover estados, refinamiento. No aprueba HITL |
+| `product_owner` | Todo en el proyecto, incluida la aprobación HITL de cualquier nivel |
+| `scrum_master` | Crear y editar HU, asignar, mover estados, pedir refinamiento; decidir HU de nivel 0 y 1 |
+| `developer` | Mover HU entre `lista` → `en_progreso` → `en_revision` (y regresar); comentar en la revisión humana |
+| `stakeholder` | Solo lectura; puede comentar en la revisión humana |
+| Servicio ADK (API key) | Ingesta, crear HU, asignar, mover estados, refinamiento, lanzar revisiones. No aprueba ni decide HITL |
+
+### Revisión humana (HITL) de cada HU
+
+Es la función central. Cada HU pasa por una revisión multiagente y luego por una persona:
+
+1. **Agentes** (`POST .../stories/{code}/review` o «Revisar con agentes» en `/p/<CLAVE>/revision`): el analista
+   evalúa INVEST, ambigüedades y preguntas y propone una versión mejorada; en paralelo, arquitectura (impactos y cambios
+   críticos: migración de datos, seguridad, API pública, costo…), QA (casos Dado/Cuando/Entonces y criterios no
+   verificables) y estimación (tipo HU-IA/HU-Tradicional y factores; el sistema calcula los puntos Fibonacci).
+2. **Política en código** (`app/services/hitl.py`, no la decide el LLM): reúne motivos y asigna el nivel.
+
+| Nivel | Cuándo | Quién decide |
+|---|---|---|
+| 2 · Requiere al product owner | Cambio crítico, conflicto entre agentes, ambigüedad o pregunta bloqueante, sin criterios o mayoría no verificable, un agente pide intervención, confianza < 0,60, agente sin respuesta, HU ya aprobada que cambia | Solo `product_owner` (o admin) |
+| 1 · Revisar | Confianza entre 0,60 y 0,85, algún criterio no verificable, mejoras de redacción, HU generada por IA, spike o estimación incompleta | `product_owner` o `scrum_master` |
+| 0 · Sin observaciones | Nada de lo anterior | `product_owner` o `scrum_master` |
+
+Nada se aprueba solo, en ningún nivel. Decisiones (`POST .../stories/{code}/hitl/decision`, o los botones de la bandeja):
+
+- **Aprobar** (con o sin la propuesta del analista): aplica la propuesta si se pide, fija el tipo si estaba vacío y pasa
+  la HU de borrador a *refinada*.
+- **Pedir cambios** (comentario obligatorio): el agente refina la HU con ese comentario y la vuelve a revisar sola.
+- **Falta información** (comentario obligatorio): la HU sigue esperando; las respuestas del equipo entran como notas
+  humanas en la siguiente revisión.
+- **Descartar** (motivo obligatorio).
+- **Comentar**: cualquier miembro, incluidos developer y stakeholder.
+
+Un servicio con API key puede lanzar revisiones pero **nunca decide** (403). Si la HU cambia después de revisada, la
+revisión queda *desactualizada* y vuelve a la cola de los agentes. La decisión lleva `expected_version` para no decidir
+sobre cambios ajenos (409). Todo queda en el historial de la HU (`hitl_reviewed`, `hitl_aprobar`, …).
 
 ### Estados de una HU
 

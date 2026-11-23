@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     agent_model: str = "gemini-3.1-pro-preview"
     agent_execution: str = "background"  # background | inline
     agent_auto_refine: bool = False
+    # HITL: umbrales de confianza de la revisión multiagente y revisión automática.
+    hitl_confidence_auto: float = 0.85
+    hitl_confidence_review: float = 0.60
+    hitl_review_after_refine: bool = True  # tras «pedir cambios», el agente refina y la HU se revisa de nuevo
+    hitl_review_generated: bool = False  # revisar automáticamente las HU que genera el agente (más llamadas al LLM)
     agent_max_doc_chars: int = 200_000
     # Fuente de documentos, excluyente: folder (agent_docs_dir/<KEY>/) O gcs (gs://bucket/prefix/<KEY>/).
     agent_docs_source: Literal["folder", "gcs"] = "folder"

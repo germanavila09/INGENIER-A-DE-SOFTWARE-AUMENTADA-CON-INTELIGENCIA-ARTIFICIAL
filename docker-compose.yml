@@ -1,3 +1,6 @@
+# Modo local: Postgres en Docker + documentos en ./documents/<CLAVE>/ + Gemini con API key (sección
+# «Modo local» de .env.example). Sin GCP: no necesita bucket, Vertex AI ni credenciales de gcloud.
+#   docker compose up --build -d
 services:
   db:
     image: postgres:16-alpine
@@ -32,7 +35,8 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      # SPB_PORT cambia el puerto en tu equipo (por defecto 8000)
+      - "${SPB_PORT:-8000}:8000"
 
 volumes:
   pgdata:

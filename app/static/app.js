@@ -25,6 +25,17 @@
     setTimeout(close, 4500);
   });
 
+  // Revisión con agentes en curso: recarga la página hasta que termine.
+  const auto = document.querySelector("[data-autorefresh]");
+  if (auto) {
+    const secs = Math.max(3, Number(auto.dataset.autorefresh) || 6);
+    setTimeout(() => {
+      // no recargar si la persona está escribiendo un comentario
+      const typing = [...document.querySelectorAll("textarea")].some((t) => t.value.trim());
+      if (!typing) window.location.reload();
+    }, secs * 1000);
+  }
+
   // Tablero kanban: arrastrar tarjeta cambia el estado vía API.
   if (window.Sortable) {
     document.querySelectorAll("[data-kanban]").forEach((board) => {

@@ -1,4 +1,4 @@
-from tests.conftest import INGEST_PAYLOAD, PASSWORD, login
+from tests.conftest import INGEST_PAYLOAD, PASSWORD, login, hitl_approve_all
 
 
 def web_login(client, email):
@@ -74,6 +74,7 @@ def test_web_edit_story_and_approve_stage(client, service_key):
     assert story["title"] == "Iniciar sesión (editada)"
     assert story["priority_rank"] == 2
 
+    hitl_approve_all(client)
     res = client.post("/p/DEMO/pipeline/1/approve", data={"summary": "ok"}, follow_redirects=False)
     assert res.status_code == 303
     stages = client.get("/api/v1/projects/DEMO/pipeline").json()

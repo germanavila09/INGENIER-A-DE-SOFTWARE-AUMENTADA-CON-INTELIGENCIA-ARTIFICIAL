@@ -35,6 +35,9 @@
           <div class="small muted" style="margin-top:6px">{{ s.approved_by }}</div>
         {% elif current %}
           <span class="badge pending">Pendiente de validación</span>
+          {% if s.stage_number == 1 %}{% set b1 = hitl.stage1_blockers(project) %}
+            <div class="small muted" style="margin:6px 0">{% if b1 %}{{ b1|length }} HU sin aprobar en <a href="/p/{{ project.key }}/revision">Revisión humana</a>{% else %}Todas las HU activas están aprobadas{% endif %}</div>
+          {% endif %}
           {% if can_write %}
           <form method="post" action="/p/{{ project.key }}/pipeline/{{ s.stage_number }}/approve">
             <input name="summary" placeholder="Resumen de cambios (opcional)" style="margin-bottom:8px">

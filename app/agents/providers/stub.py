@@ -16,6 +16,14 @@ from app.agents.ports import (
     GenerationOutput,
     RefinementInput,
     RefinementOutput,
+    ReviewAnalysis,
+    ReviewArchitecture,
+    ReviewEstimation,
+    ReviewInput,
+    ReviewOutput,
+    ReviewQA,
+    ReviewQuestion,
+    ReviewTestCase,
     SizingInput,
     SizingOutput,
     Usage,
@@ -202,6 +210,9 @@ class StubProvider:
         )
         return output, Usage(model=self.model)
 
+    def review_story(self, data: ReviewInput) -> tuple[ReviewOutput, Usage]:
+        return stub_review(data), Usage(model=self.model)
+
     def extract_context(self, data: ContextExtractionInput, tools) -> tuple[ContextGraphOutput, Usage]:
         """Grafo determinista desde los documentos: actividades BPMN y necesidades → funcionalidades;
         participantes BPMN → entidades; viñetas de secciones «Restricciones» → restricciones."""
@@ -256,3 +267,78 @@ class StubProvider:
         output = ContextGraphOutput(nodes=nodes[:300], edges=edges[:1000],
                                     notes="Stub: grafo por heurística de secciones; revísalo antes de aprobar.")
         return output, Usage(model=self.model)
+
+
+# ---------- revisión multiagente determinista (demos y pruebas) ----------
+VAGUE = ("rápido", "rapido", "fácil", "facil", "intuitiv", "adecuad", "amigable", "etc", "lo antes posible", "óptim")
+CRITICAL_TERMS = (
+    ("DATA_MIGRATION", ("migrar", "migración", "migracion")),
+    ("DATA_DELETION", ("eliminar datos", "borrar datos", "eliminar la información", "purgar")),
+    ("COMPONENT_REMOVAL", ("eliminar el módulo", "retirar el sistema", "apagar el servicio")),
+    ("SECURITY_MODEL_CHANGE", ("contraseña", "autentica", "permisos", "roles de acceso")),
+    ("PUBLIC_API_CHANGE", ("api pública", "api publica", "contrato de la api")),
+)
+IA_TERMS = ("modelo", "clasific", "predic", "entrena", "llm", "inteligencia artificial", "detecci", "imágenes satelitales")
+
+
+def _criteria(story: dict) -> list[str]:
+    out = []
+    for line in (story.get("acceptance_criteria") or "").splitlines():
+        m = BULLET.match(line)
+        text = (m.group(1) if m else line).strip()
+        if text and not text.startswith("#"):
+            out.append(text)
+    return out
+
+
+def stub_review(data: ReviewInput) -> ReviewOutput:
+    story = data.story
+    text = _story_text(story)
+    criteria = _criteria(story)
+    vague = [c for c in criteria if any(v in c.lower() for v in VAGUE)]
+    answered = bool(data.human_notes)
+    questions = []
+    if not (story.get("role") and story.get("need")) and not answered:
+        questions.append(ReviewQuestion(question="¿Quién usa esta funcionalidad y qué necesita exactamente?", blocking=True))
+    for c in vague[:3]:
+        if not answered:
+            questions.append(ReviewQuestion(question=f"¿Qué valor medible define «{c[:80]}»?", blocking=False))
+    critical = [code for code, terms in CRITICAL_TERMS if any(t in text for t in terms)]
+    testable = 1 if not criteria else (2 if vague else 4)
+    confidence = 0.9 if criteria and not vague and not questions else (0.7 if criteria else 0.5)
+    if answered:
+        confidence = max(confidence, 0.88)
+    improved = [c.rstrip(".") + " (con un valor verificable)" if c in vague else c for c in criteria] or [
+        f"El sistema permite {story.get('need') or story.get('title')}."]
+    analysis = ReviewAnalysis(
+        summary=f"HU con {len(criteria)} criterio(s); {len(vague)} ambiguo(s).",
+        invest={"independent": 4, "negotiable": 4, "valuable": 4 if story.get("benefit") else 2,
+                "estimable": 3 if questions else 4, "small": 4, "testable": testable},
+        ambiguities=vague, questions=questions,
+        suggested_changes=[f"acceptance_criteria: precisar «{c[:60]}» (no es verificable)" for c in vague],
+        improved_title=story.get("title"), improved_role=story.get("role"), improved_need=story.get("need"),
+        improved_benefit=story.get("benefit"), improved_criteria=improved,
+        requires_hitl=bool([q for q in questions if q.blocking]), confidence=confidence,
+    )
+    architecture = ReviewArchitecture(
+        summary="Impacto acotado." if not critical else "La HU implica cambios críticos.",
+        impacts=["backend: nueva lógica de negocio"], critical_changes=critical,
+        status="NEEDS_CHANGES" if critical else "APPROVED", requires_hitl=bool(critical), confidence=0.85,
+    )
+    untestable = [c for c in vague] if criteria else ["La HU no tiene criterios de aceptación"]
+    qa = ReviewQA(
+        summary=f"{len(criteria)} caso(s) positivos.",
+        test_cases=[ReviewTestCase(title=c[:120], type="POSITIVE", criterion=c, given="un usuario autorizado",
+                                   when="ejecuta la acción", then=c) for c in criteria[:10]],
+        untestable_criteria=untestable,
+        status="NEEDS_CHANGES" if untestable else "APPROVED", confidence=0.85,
+    )
+    if any(t in text for t in IA_TERMS):
+        estimation = ReviewEstimation(story_type="HU_IA", type_justification="Requiere construir o ajustar un componente de IA.",
+                                      datos=4 if "datos" in text else 3, modelo=3, evaluacion=3, riesgo=3, integracion=2,
+                                      rationale="Datos y evaluación del modelo por confirmar.", confidence=0.75)
+    else:
+        estimation = ReviewEstimation(story_type="HU_TRADICIONAL", type_justification="No construye componentes de IA.",
+                                      complejidad=2, esfuerzo=3, incertidumbre=4 if vague else 2,
+                                      rationale="Esfuerzo moderado de construcción.", confidence=0.8)
+    return ReviewOutput(analysis=analysis, architecture=architecture, qa=qa, estimation=estimation)

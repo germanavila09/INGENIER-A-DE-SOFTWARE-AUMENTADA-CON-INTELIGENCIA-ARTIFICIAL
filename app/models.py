@@ -128,6 +128,9 @@ class UserStory(Base):
     refinements: Mapped[list["RefinementRequest"]] = relationship(
         back_populates="story", cascade="all, delete-orphan", order_by="RefinementRequest.id"
     )
+    reviews: Mapped[list["StoryReview"]] = relationship(
+        back_populates="story", cascade="all, delete-orphan", order_by="StoryReview.id"
+    )
 
 
 class StoryEvent(Base):
@@ -246,3 +249,60 @@ class ApiKey(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class StoryReview(Base):
+    """Revisión multiagente de una versión de la HU (analista, arquitectura, QA, estimación) y su nivel HITL.
+
+    El nivel lo calcula services/hitl.py con reglas en código: 0 = sin observaciones, 1 = revisar,
+    2 = cambios críticos o información faltante (solo el product owner decide). Nada se aprueba solo:
+    toda revisión espera una decisión humana (HitlDecision).
+    """
+
+    __tablename__ = "story_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    story_id: Mapped[int] = mapped_column(ForeignKey("user_stories.id", ondelete="CASCADE"), index=True)
+    story_version: Mapped[int] = mapped_column(Integer)
+    # Versión resultante cuando una persona aprueba aplicando la propuesta (la revisión sigue vigente).
+    applied_version: Mapped[int | None] = mapped_column(Integer)
+    agent_run_id: Mapped[int | None] = mapped_column(ForeignKey("agent_runs.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)  # queued|running|done|failed
+    level: Mapped[int | None] = mapped_column(Integer)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    quality: Mapped[float | None] = mapped_column(Float)
+    story_type: Mapped[str | None] = mapped_column(String(24))
+    reasons: Mapped[list] = mapped_column(JSON, default=list)
+    questions: Mapped[list] = mapped_column(JSON, default=list)
+    proposal: Mapped[dict | None] = mapped_column(JSON)
+    estimation: Mapped[dict | None] = mapped_column(JSON)
+    agents: Mapped[dict | None] = mapped_column(JSON)  # salida de cada agente y errores
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    story: Mapped[UserStory] = relationship(back_populates="reviews")
+    decisions: Mapped[list["HitlDecision"]] = relationship(
+        back_populates="review", cascade="all, delete-orphan", order_by="HitlDecision.id"
+    )
+
+
+class HitlDecision(Base):
+    """Decisión o comentario de una persona sobre una revisión. Solo personas: un servicio no decide."""
+
+    __tablename__ = "hitl_decisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey("story_reviews.id", ondelete="CASCADE"), index=True)
+    story_id: Mapped[int] = mapped_column(ForeignKey("user_stories.id", ondelete="CASCADE"), index=True)
+    decision: Mapped[str] = mapped_column(String(24))  # aprobar|pedir_cambios|descartar|falta_info|comentario
+    comment: Mapped[str | None] = mapped_column(Text)
+    applied_proposal: Mapped[bool] = mapped_column(Boolean, default=False)
+    level: Mapped[int | None] = mapped_column(Integer)
+    role: Mapped[str | None] = mapped_column(String(32))
+    decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    review: Mapped[StoryReview] = relationship(back_populates="decisions")
+    decided_by: Mapped[User | None] = relationship()

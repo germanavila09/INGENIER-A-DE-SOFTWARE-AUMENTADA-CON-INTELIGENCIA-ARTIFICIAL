@@ -182,3 +182,113 @@ class AgentProvider(Protocol):
     def generate_from_documents(
         self, data: DocumentGenerationInput, tools: "DocumentTools"
     ) -> tuple[GenerationOutput, Usage]: ...
+
+    def review_story(self, data: "ReviewInput") -> tuple["ReviewOutput", Usage]: ...
+
+
+# ---------- revisión multiagente de una HU (HITL) ----------
+# Cuatro agentes revisan la HU: analista → (arquitectura ∥ QA ∥ estimación). Ninguno decide el nivel HITL:
+# lo calcula services/hitl.py con reglas en código. Estos DTO validan la salida del modelo.
+
+ReviewStatus = Literal["APPROVED", "APPROVED_WITH_OBSERVATIONS", "NEEDS_CHANGES", "CRITICAL_RISK"]
+CriticalChange = Literal[
+    "ARCHITECTURE_CHANGE", "COMPONENT_REMOVAL", "DATA_MIGRATION", "PUBLIC_API_CHANGE", "SECURITY_MODEL_CHANGE",
+    "SIGNIFICANT_COST_INCREASE", "IRREVERSIBLE_CHANGE", "DATA_DELETION", "CROSS_PROJECT_IMPACT",
+]
+
+
+class ReviewQuestion(BaseModel):
+    question: str = Field(min_length=3, max_length=1000)
+    blocking: bool = False
+
+
+class InvestScore(BaseModel):
+    independent: int = Field(ge=0, le=5)
+    negotiable: int = Field(ge=0, le=5)
+    valuable: int = Field(ge=0, le=5)
+    estimable: int = Field(ge=0, le=5)
+    small: int = Field(ge=0, le=5)
+    testable: int = Field(ge=0, le=5)
+
+
+class ReviewAnalysis(BaseModel):
+    summary: str = Field(max_length=3000)
+    invest: InvestScore
+    ambiguities: list[str] = Field(default_factory=list, max_length=30)
+    questions: list[ReviewQuestion] = Field(default_factory=list, max_length=30)
+    risks: list[str] = Field(default_factory=list, max_length=30)
+    suggested_changes: list[str] = Field(default_factory=list, max_length=30)
+    improved_title: str | None = Field(None, max_length=255)
+    improved_role: str | None = None
+    improved_need: str | None = None
+    improved_benefit: str | None = None
+    improved_criteria: list[str] = Field(default_factory=list, max_length=40)
+    requires_hitl: bool = False
+    hitl_reason: str | None = None
+    confidence: float = Field(ge=0, le=1)
+
+
+class ReviewArchitecture(BaseModel):
+    summary: str = Field(max_length=3000)
+    impacts: list[str] = Field(default_factory=list, max_length=30)
+    critical_changes: list[CriticalChange] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list, max_length=30)
+    status: ReviewStatus
+    requires_hitl: bool = False
+    hitl_reason: str | None = None
+    confidence: float = Field(ge=0, le=1)
+
+
+class ReviewTestCase(BaseModel):
+    title: str = Field(max_length=300)
+    type: Literal["POSITIVE", "NEGATIVE", "EDGE_CASE", "INTEGRATION", "DATA_VALIDATION", "SECURITY"]
+    criterion: str | None = None
+    given: str
+    when: str
+    then: str
+
+
+class ReviewQA(BaseModel):
+    summary: str = Field(max_length=3000)
+    test_cases: list[ReviewTestCase] = Field(default_factory=list, max_length=40)
+    untestable_criteria: list[str] = Field(default_factory=list, max_length=40)
+    coverage_gaps: list[str] = Field(default_factory=list, max_length=30)
+    status: ReviewStatus
+    confidence: float = Field(ge=0, le=1)
+
+
+class ReviewEstimation(BaseModel):
+    """Un campo por factor (Gemini no admite diccionarios libres). Los puntos los calcula services/estimation.py."""
+
+    story_type: Literal["HU_IA", "HU_TRADICIONAL"]
+    type_justification: str
+    datos: int | None = None
+    modelo: int | None = None
+    evaluacion: int | None = None
+    riesgo: int | None = None
+    integracion: int | None = None
+    complejidad: int | None = None
+    esfuerzo: int | None = None
+    incertidumbre: int | None = None
+    rationale: str
+    confidence: float = Field(ge=0, le=1)
+
+
+class ReviewInput(BaseModel):
+    project_key: str
+    project_name: str
+    project_description: str | None = None
+    story: dict
+    other_stories: list[str] = Field(default_factory=list)
+    context: str | None = None
+    human_notes: list[str] = Field(default_factory=list)
+
+
+class ReviewOutput(BaseModel):
+    """Salida de los cuatro agentes. None = ese agente no produjo una salida válida (el HITL lo detiene)."""
+
+    analysis: ReviewAnalysis | None = None
+    architecture: ReviewArchitecture | None = None
+    qa: ReviewQA | None = None
+    estimation: ReviewEstimation | None = None
+    errors: dict[str, str] = Field(default_factory=dict)

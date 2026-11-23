@@ -5,7 +5,7 @@ from pypdf import PdfWriter
 
 from app.agents.providers.stub import StubProvider
 from app.config import settings
-from tests.conftest import INGEST_PAYLOAD, login
+from tests.conftest import INGEST_PAYLOAD, login, hitl_approve_all
 
 BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" id="d">
@@ -419,6 +419,7 @@ def test_agent_never_approves_stage_3_and_humans_still_do(demo, agents, service_
     stages = {s["stage_number"]: s for s in demo.get("/api/v1/projects/DEMO/pipeline").json()}
     assert stages[3]["status"] == "pending" and stages[3]["name"] == "Estimación"
     assert demo.post("/api/v1/projects/DEMO/pipeline/3/approve", headers={"X-API-Key": service_key}).status_code == 422
+    hitl_approve_all(demo)
     for n in (1, 2, 3):
         assert demo.post(f"/api/v1/projects/DEMO/pipeline/{n}/approve", json={"summary": "revisado"}).status_code == 200
 

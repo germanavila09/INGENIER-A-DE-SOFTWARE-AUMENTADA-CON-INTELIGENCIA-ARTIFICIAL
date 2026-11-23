@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import PipelineStage, Project, ProjectMember, User, utcnow
+from app.services import hitl
 from app.services.errors import Conflict, Unprocessable
 from app.services.stories import open_violations
 from app.services.workflow import STATUS_LABELS
@@ -36,6 +37,17 @@ def approve_stage(db: Session, project: Project, number: int, user: User, summar
         raise Conflict(f"La etapa {number} ya está aprobada")
     if number > 1 and stages[number - 1].status != "approved":
         raise Unprocessable(f"Debes aprobar la etapa {number - 1} antes de la etapa {number}")
+    if number == 1:
+        # HITL: cada HU activa debe tener una revisión multiagente vigente aprobada por una persona.
+        blockers = hitl.stage1_blockers(project)
+        if blockers:
+            listed = ", ".join(blockers[:10]) + (f" y {len(blockers) - 10} más" if len(blockers) > 10 else "")
+            raise Unprocessable(
+                f"Hay {len(blockers)} HU sin aprobar en la revisión humana: {listed}. "
+                "Revísalas con los agentes y decide en la bandeja «Revisión humana»."
+            )
+        if not any(s.status != "descartada" for s in project.stories):
+            raise Unprocessable("El proyecto no tiene HU activas: genera o crea al menos una antes de aprobar la etapa 1")
     if number == 3:
         pending = open_violations(project)
         if pending:

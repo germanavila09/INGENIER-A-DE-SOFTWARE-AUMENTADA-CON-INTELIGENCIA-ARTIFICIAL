@@ -404,3 +404,72 @@ def test_context_schemas_sent_to_gemini_have_no_length_constraints():
         text = _json.dumps(model.model_json_schema())
         for forbidden in ("minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum", "pattern"):
             assert forbidden not in text, f"{model.__name__} expone {forbidden}"
+
+
+# ---------- revisión multiagente HITL: analista → (arquitectura ∥ QA ∥ estimación) ----------
+
+REVIEW_PAYLOADS = {
+    "Eres el analista de requisitos": {
+        "summary": "Falta el umbral.", "invest": {"independent": 4, "negotiable": 4, "valuable": 5, "estimable": 3,
+                                                  "small": 4, "testable": 2},
+        "questions": [{"question": "¿Cuál es el umbral de nubosidad?", "blocking": True}],
+        "improved_criteria": ["Descarta escenas con nubosidad mayor al umbral configurado"], "confidence": 0.7,
+    },
+    "Eres el arquitecto": {"summary": "Nuevo servicio.", "impacts": ["backend: job de filtrado"],
+                           "critical_changes": ["SIGNIFICANT_COST_INCREASE"], "status": "APPROVED_WITH_OBSERVATIONS",
+                           "requires_hitl": True, "hitl_reason": "Costo de procesamiento", "confidence": 0.8},
+    "Eres el ingeniero de calidad": {"summary": "1 caso.", "test_cases": [
+        {"title": "Filtra nubes", "type": "POSITIVE", "given": "una escena", "when": "se procesa", "then": "se descarta"}],
+        "untestable_criteria": ["«Pocas nubes» no tiene umbral"], "status": "NEEDS_CHANGES", "confidence": 0.8},
+    "Eres el analista que puntúa": {"story_type": "HU_IA", "type_justification": "Ajusta un clasificador",
+                                    "datos": 4, "modelo": 3, "evaluacion": 3, "riesgo": 3, "integracion": 2,
+                                    "rationale": "Datos etiquetados por conseguir", "confidence": 0.75},
+}
+
+
+class ReviewGemini(BaseLlm):
+    """Responde según el agente (por su instrucción) y registra si el paso paralelo vio al analista."""
+
+    model: str = "fake-gemini-pro"
+    seen: list = []
+
+    async def generate_content_async(self, llm_request, stream=False):
+        instruction = str(llm_request.config.system_instruction)
+        key = next(k for k in REVIEW_PAYLOADS if k in instruction)
+        self.seen.append((key, "Falta el umbral." in str(llm_request.contents)))
+        yield LlmResponse(
+            content=types.Content(role="model", parts=[types.Part(text=json.dumps(REVIEW_PAYLOADS[key]))]),
+            usage_metadata=types.GenerateContentResponseUsageMetadata(prompt_token_count=10, candidates_token_count=5),
+            turn_complete=True,
+        )
+
+
+def test_review_story_through_adk_pipeline():
+    from app.agents.ports import ReviewInput
+    from app.services import hitl
+
+    fake = ReviewGemini(seen=[])
+    provider = AdkProvider(model="gemini-2.5-flash", api_key="clave-falsa-de-prueba", llm=fake)
+    story = {"code": "SIN-1", "title": "Filtrar nubes", "role": "analista", "need": "descartar escenas nubladas",
+             "acceptance_criteria": "- [ ] Pocas nubes"}
+    out, usage = provider.review_story(ReviewInput(project_key="SIN", project_name="Sinchi", story=story,
+                                                   human_notes=["El umbral lo define el equipo SIG"]))
+    assert fake.seen[0] == ("Eres el analista de requisitos", False)
+    # los tres del paso paralelo ven la respuesta del analista en la conversación
+    assert sorted(k for k, saw in fake.seen[1:] if saw) == sorted(list(REVIEW_PAYLOADS)[1:])
+    assert (usage.tokens_in, usage.tokens_out) == (40, 20) and not out.errors
+
+    result = hitl.evaluate(out, story)
+    codes = {r["code"] for r in result["reasons"]}
+    assert result["level"] == 2 and {"COST_INCREASE", "CRITICAL_AMBIGUITY", "UNVERIFIABLE_CRITERIA", "SPIKE_REQUIRED"} <= codes
+    assert result["estimation"]["method"] == "ia_factores_v1" and result["story_type"] == "HU_IA"
+
+
+def test_review_invalid_agent_output_is_missing_not_crash():
+    from app.agents.providers.adk import parse_review_state
+
+    out = parse_review_state({"analysis": REVIEW_PAYLOADS["Eres el analista de requisitos"],
+                              "architecture": json.dumps({"summary": "x", "status": "MAYBE", "confidence": 2}),
+                              "qa": None})
+    assert out.analysis is not None and out.architecture is None and out.qa is None
+    assert set(out.errors) == {"architecture", "qa", "estimation"}

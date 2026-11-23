@@ -30,6 +30,12 @@ from app.agents.ports import (
     GenerationOutput,
     RefinementInput,
     RefinementOutput,
+    ReviewAnalysis,
+    ReviewArchitecture,
+    ReviewEstimation,
+    ReviewInput,
+    ReviewOutput,
+    ReviewQA,
     SizingInput,
     SizingOutput,
     Usage,
@@ -43,6 +49,10 @@ from app.agents.prompts import (
     GENERATOR_FROM_DOCS_INSTRUCTION,
     GENERATOR_INSTRUCTION,
     REFINER_INSTRUCTION,
+    REVIEW_ANALYST_INSTRUCTION,
+    REVIEW_ARCHITECTURE_INSTRUCTION,
+    REVIEW_ESTIMATION_INSTRUCTION,
+    REVIEW_QA_INSTRUCTION,
 )
 from app.services import context_graph
 
@@ -146,6 +156,111 @@ class _LlmContextReport(BaseModel):
     summary: str | None = None
 
 
+_REVIEW_STATUS = Literal["APPROVED", "APPROVED_WITH_OBSERVATIONS", "NEEDS_CHANGES", "CRITICAL_RISK"]
+
+
+class _LlmQuestion(BaseModel):
+    question: str
+    blocking: bool = Field(False, description="true solo si sin la respuesta no se puede implementar o probar")
+
+
+class _LlmInvest(BaseModel):
+    independent: int = Field(description="0-5")
+    negotiable: int = Field(description="0-5")
+    valuable: int = Field(description="0-5")
+    estimable: int = Field(description="0-5")
+    small: int = Field(description="0-5")
+    testable: int = Field(description="0-5")
+
+
+class _LlmAnalysis(BaseModel):
+    summary: str = Field(description="2 o 3 frases")
+    invest: _LlmInvest
+    ambiguities: list[str] = Field(default_factory=list)
+    questions: list[_LlmQuestion] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    suggested_changes: list[str] = Field(default_factory=list, description="«campo: cambio (razón)»")
+    improved_title: str | None = None
+    improved_role: str | None = None
+    improved_need: str | None = None
+    improved_benefit: str | None = None
+    improved_criteria: list[str] = Field(default_factory=list, description="Criterios verificables, uno por elemento")
+    requires_hitl: bool = False
+    hitl_reason: str | None = None
+    confidence: float = Field(description="0 a 1")
+
+
+class _LlmArchitecture(BaseModel):
+    summary: str
+    impacts: list[str] = Field(default_factory=list)
+    critical_changes: list[Literal[
+        "ARCHITECTURE_CHANGE", "COMPONENT_REMOVAL", "DATA_MIGRATION", "PUBLIC_API_CHANGE", "SECURITY_MODEL_CHANGE",
+        "SIGNIFICANT_COST_INCREASE", "IRREVERSIBLE_CHANGE", "DATA_DELETION", "CROSS_PROJECT_IMPACT",
+    ]] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    status: _REVIEW_STATUS
+    requires_hitl: bool = False
+    hitl_reason: str | None = None
+    confidence: float = Field(description="0 a 1")
+
+
+class _LlmTestCase(BaseModel):
+    title: str
+    type: Literal["POSITIVE", "NEGATIVE", "EDGE_CASE", "INTEGRATION", "DATA_VALIDATION", "SECURITY"]
+    criterion: str | None = None
+    given: str
+    when: str
+    then: str
+
+
+class _LlmQA(BaseModel):
+    summary: str
+    test_cases: list[_LlmTestCase] = Field(default_factory=list)
+    untestable_criteria: list[str] = Field(default_factory=list)
+    coverage_gaps: list[str] = Field(default_factory=list)
+    status: _REVIEW_STATUS
+    confidence: float = Field(description="0 a 1")
+
+
+class _LlmEstimation(BaseModel):
+    story_type: Literal["HU_IA", "HU_TRADICIONAL"]
+    type_justification: str
+    datos: int | None = Field(None, description="HU_IA, 1-5")
+    modelo: int | None = Field(None, description="HU_IA, 1-5")
+    evaluacion: int | None = Field(None, description="HU_IA, 1-5")
+    riesgo: int | None = Field(None, description="HU_IA, 1-5")
+    integracion: int | None = Field(None, description="HU_IA, 1-5")
+    complejidad: int | None = Field(None, description="HU_TRADICIONAL, 1-5")
+    esfuerzo: int | None = Field(None, description="HU_TRADICIONAL, 1-5")
+    incertidumbre: int | None = Field(None, description="HU_TRADICIONAL, 1-5")
+    rationale: str
+    confidence: float = Field(description="0 a 1")
+
+
+def review_user_text(data: ReviewInput) -> str:
+    """Mensaje que reciben los cuatro agentes de la revisión (también lo usa el stub en las pruebas)."""
+    s = data.story
+    partes = [
+        f"Proyecto: {data.project_key} — {data.project_name}",
+        f"Descripción del proyecto: {data.project_description}" if data.project_description else "",
+        f"\nHU {s.get('code')} (épica: {s.get('epic') or 'sin épica'}, tipo actual: {s.get('type') or 'sin tipo'}, "
+        f"estado: {s.get('status')}, origen: {s.get('origin')})",
+        f"Título: {s.get('title')}",
+        f"Rol: {s.get('role') or ''}",
+        f"Necesidad: {s.get('need') or ''}",
+        f"Beneficio: {s.get('benefit') or ''}",
+        f"Criterios (markdown):\n<criterios>\n{s.get('acceptance_criteria') or ''}\n</criterios>",
+        f"Fuente: {s.get('source_ref')}" if s.get("source_ref") else "",
+    ]
+    if data.other_stories:
+        partes.append("\nOtras HU del proyecto (para dependencias y solapes):\n" + "\n".join(f"- {x}" for x in data.other_stories))
+    if data.context:
+        partes.append(f"\n<contexto_del_proyecto>\n{data.context}\n</contexto_del_proyecto>")
+    if data.human_notes:
+        partes.append("\nNotas y respuestas del equipo (prioridad alta):\n" + "\n".join(f"- {x}" for x in data.human_notes))
+    return "\n".join(p for p in partes if p)
+
+
 def _check_adc() -> None:
     """Vertex AI usa Application Default Credentials: si no hay, el proveedor queda «no configurado»."""
     try:
@@ -172,7 +287,7 @@ class AdkProvider:
           (`gcloud auth application-default login` o una cuenta de servicio). No usa clave.
         """
         try:
-            from google.adk.agents import LlmAgent, SequentialAgent
+            from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
             from google.adk.apps import App
             from google.adk.plugins.base_plugin import BasePlugin
             from google.adk.runners import Runner
@@ -202,6 +317,7 @@ class AdkProvider:
         self.model = model if isinstance(model, str) else getattr(model, "model", None)
         self._LlmAgent = LlmAgent
         self._SequentialAgent = SequentialAgent
+        self._ParallelAgent = ParallelAgent
         self._App = App
         self._BasePlugin = BasePlugin
         self._AgentTool = AgentTool
@@ -380,3 +496,43 @@ class AdkProvider:
         return self._call(
             CONTEXT_EXTRACTOR_INSTRUCTION, _LlmGraph, ContextGraphOutput, user_text, tools=tools.functions,
         )
+
+    def review_story(self, data: ReviewInput) -> tuple[ReviewOutput, Usage]:
+        """Revisión multiagente: analista → (arquitectura ∥ QA ∥ estimación), como en hu_multiagent.
+
+        Cada agente deja su JSON en el estado de la sesión (output_key). Una salida que no valida queda en None
+        con su error: la política HITL lo trata como agente faltante y detiene la HU para una persona.
+        """
+        def agent(name, instruction, schema, key):
+            return self._LlmAgent(name=name, model=self._model_ref, instruction=instruction,
+                                  output_schema=schema, output_key=key)
+
+        pipeline = self._SequentialAgent(
+            name="revision_hu",
+            sub_agents=[
+                agent("analista_hu", REVIEW_ANALYST_INSTRUCTION, _LlmAnalysis, "analysis"),
+                self._ParallelAgent(name="revision_paralela", sub_agents=[
+                    agent("arquitectura_hu", REVIEW_ARCHITECTURE_INSTRUCTION, _LlmArchitecture, "architecture"),
+                    agent("qa_hu", REVIEW_QA_INSTRUCTION, _LlmQA, "qa"),
+                    agent("estimacion_hu", REVIEW_ESTIMATION_INSTRUCTION, _LlmEstimation, "estimation"),
+                ]),
+            ],
+        )
+        _final, state, usage = self._execute(pipeline, review_user_text(data))
+        return parse_review_state(state), usage
+
+
+def parse_review_state(state: dict) -> ReviewOutput:
+    """Valida con los DTO estrictos lo que cada agente dejó en el estado (dict o texto JSON)."""
+    out, errors = {}, {}
+    for key, dto in (("analysis", ReviewAnalysis), ("architecture", ReviewArchitecture), ("qa", ReviewQA),
+                     ("estimation", ReviewEstimation)):
+        raw = state.get(key)
+        if raw is None:
+            errors[key] = "sin salida"
+            continue
+        try:
+            out[key] = dto.model_validate_json(raw) if isinstance(raw, str) else dto.model_validate(raw)
+        except Exception as exc:  # noqa: BLE001 - salida inválida: el HITL la trata como faltante
+            errors[key] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    return ReviewOutput(**out, errors=errors)

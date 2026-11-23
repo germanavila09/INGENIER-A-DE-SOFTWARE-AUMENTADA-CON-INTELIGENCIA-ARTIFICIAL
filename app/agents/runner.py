@@ -35,9 +35,9 @@ from app.agents.ports import (
 from app.agents.registry import get_provider
 from app.config import settings
 from app.db import SessionLocal
-from app.models import AgentRun, Project, RefinementRequest, UserStory, utcnow
+from app.models import AgentRun, Project, RefinementRequest, StoryReview, UserStory, utcnow
 from app.schemas import RefinementResult
-from app.services import audit, context_graph, fpa, nfr
+from app.services import audit, context_graph, fpa, hitl, nfr
 from app.services import context as context_service
 from app.services import refinement as refinement_service
 from app.services import stories as story_service
@@ -157,6 +157,7 @@ def execute_generation(run_id: int, project_key: str, source_name: str, text: st
             run.cost_usd = _cost(usage.tokens_in, usage.tokens_out)
             run.status = "succeeded"
             db.commit()
+            _review_generated(db, project, created + updated, run.requested_by_id)
         except Exception as exc:  # noqa: BLE001 - cualquier fallo del proveedor queda registrado, sin HU a medias
             db.rollback()
             run = db.get(AgentRun, run_id)
@@ -244,6 +245,7 @@ def execute_generation_from_documents(run_id: int, project_key: str, instruction
             run.cost_usd = _cost(usage.tokens_in, usage.tokens_out)
             run.status = "succeeded"
             db.commit()
+            _review_generated(db, project, created + updated, run.requested_by_id)
         except Exception as exc:  # noqa: BLE001 - igual que execute_generation: sin HU a medias
             db.rollback()
             run = db.get(AgentRun, run_id)
@@ -332,6 +334,7 @@ def execute_refinement(run_id: int, request_id: int, instructions: str | None) -
             run.cost_usd = _cost(usage.tokens_in, usage.tokens_out)
             run.status = "succeeded"
             db.commit()
+            _review_after_refinement(db, req.story_id, run.requested_by_id)
         except Exception as exc:  # noqa: BLE001
             db.rollback()
             req = db.get(RefinementRequest, request_id)
@@ -595,6 +598,146 @@ def execute_context_extraction(run_id: int, project_key: str, instructions: str 
         db.close()
 
 
+# ---------- revisión multiagente y HITL ----------
+
+def _needs_review(story: UserStory) -> bool:
+    return story.status != "descartada" and hitl.state(story)["key"] in hitl.NEEDS_AGENT
+
+
+def start_review(
+    db: Session, project: Project, stories: list[UserStory], *, user_id: int | None, background: BackgroundTasks | None,
+) -> AgentRun:
+    """Encola la revisión multiagente de una o varias HU (una StoryReview por HU, una ejecución en total)."""
+    if not stories:
+        raise Unprocessable("No hay HU que revisar: todas tienen una revisión vigente")
+    busy = [s.code for s in stories if hitl.state(s)["key"] == "analizando"]
+    if busy:
+        raise Conflict(f"Ya se están revisando: {', '.join(busy)}")
+    provider_name, model = _provider_identity()
+    run = _new_run(
+        db, project, "review_story" if len(stories) == 1 else "review_backlog", provider_name, model,
+        story_id=stories[0].id if len(stories) == 1 else None,
+        input_ref=", ".join(s.code for s in stories)[:500], requested_by_id=user_id,
+    )
+    review_ids = []
+    for story in stories:
+        review = StoryReview(project_id=project.id, story_id=story.id, story_version=story.version,
+                             agent_run_id=run.id, status="queued", reasons=[], questions=[])
+        db.add(review)
+        db.flush()
+        review_ids.append(review.id)
+    db.commit()
+    run_id = run.id
+    _dispatch(background, execute_reviews, run_id, project.key, review_ids)
+    db.expire_all()
+    return db.get(AgentRun, run_id)
+
+
+def start_pending_reviews(db: Session, project: Project, *, user_id: int | None, background: BackgroundTasks | None) -> AgentRun:
+    return start_review(db, project, [s for s in _active_in_order(db, project) if _needs_review(s)],
+                        user_id=user_id, background=background)
+
+
+def execute_reviews(run_id: int, project_key: str, review_ids: list[int]) -> None:
+    """Corre los cuatro agentes por HU y guarda el nivel HITL. Una HU que falla no detiene a las demás."""
+    db = SessionLocal()
+    try:
+        run = db.get(AgentRun, run_id)
+        run.status, run.started_at = "running", utcnow()
+        db.commit()
+        done, failed = [], []
+        try:
+            provider = get_provider()
+            project = run.project
+            graph = _approved_graph(db, project)
+            context_text = context_graph.render(graph) if graph else None
+            for review_id in review_ids:
+                review = db.get(StoryReview, review_id)
+                story = review.story
+                review.status = "running"
+                db.commit()
+                try:
+                    if story.version != review.story_version:
+                        raise Conflict(f"La HU {story.code} cambió antes de revisarse (versión {story.version})")
+                    out, usage = provider.review_story(hitl.build_input(project, story, context_text))
+                    hitl.save_result(review, story, out)
+                    run.tokens_in += usage.tokens_in
+                    run.tokens_out += usage.tokens_out
+                    run.model = usage.model or run.model
+                    audit.record(db, story, ServiceActor(provider.name).as_actor(), "hitl_reviewed",
+                                 diff={"revision": review.id, "nivel": review.level, "confianza": review.confidence})
+                    db.commit()
+                    done.append({"story": story.code, "level": review.level})
+                except Exception as exc:  # noqa: BLE001
+                    db.rollback()
+                    review = db.get(StoryReview, review_id)
+                    review.status, review.error, review.finished_at = "failed", _error_text(exc), utcnow()
+                    db.commit()
+                    failed.append({"story": review.story.code, "error": _error_text(exc)})
+                    log.warning("Revisión de %s falló: %s", review.story.code, exc)
+            run = db.get(AgentRun, run_id)
+            run.cost_usd = _cost(run.tokens_in, run.tokens_out)
+            run.result = {"reviewed": done, "failed": failed}
+            run.status = "succeeded" if done or not failed else "failed"
+            run.error = None if run.status == "succeeded" else "; ".join(f["error"] for f in failed)[:2000]
+            db.commit()
+        except Exception as exc:  # noqa: BLE001 - p. ej. proveedor no configurado
+            db.rollback()
+            for review_id in review_ids:
+                review = db.get(StoryReview, review_id)
+                if review.status in ("queued", "running"):
+                    review.status, review.error, review.finished_at = "failed", _error_text(exc), utcnow()
+            run = db.get(AgentRun, run_id)
+            run.status, run.error = "failed", _error_text(exc)
+            db.commit()
+        finally:
+            run = db.get(AgentRun, run_id)
+            run.finished_at = utcnow()
+            db.commit()
+    finally:
+        db.close()
+
+
+def _review_generated(db: Session, project: Project, codes: list[str], user_id: int | None) -> None:
+    """Con HITL_REVIEW_GENERATED=true, las HU que crea o cambia el generador pasan de una vez por la revisión."""
+    if not settings.hitl_review_generated or not codes:
+        return
+    stories = [s for s in project.stories if s.code in codes and _needs_review(s)]
+    try:
+        if stories:
+            start_review(db, project, stories, user_id=user_id, background=None)
+    except Exception as exc:  # noqa: BLE001 - la generación ya quedó guardada
+        db.rollback()
+        log.warning("No se pudieron revisar las HU generadas: %s", exc)
+
+
+def _review_after_refinement(db: Session, story_id: int, user_id: int | None) -> None:
+    """Tras un «pedir cambios» del HITL, la HU refinada vuelve a revisión con los agentes (en el mismo hilo)."""
+    if not settings.hitl_review_after_refine:
+        return
+    story = db.get(UserStory, story_id)
+    last = hitl.last_decision(hitl.latest_review(story))
+    if last is None or last.decision != "pedir_cambios":
+        return
+    try:
+        start_review(db, story.project, [story], user_id=user_id, background=None)
+    except Exception as exc:  # noqa: BLE001 - la HU queda refinada; la revisión se puede lanzar a mano
+        db.rollback()
+        log.warning("No se pudo revisar %s después de refinarla: %s", story.code, exc)
+
+
+def request_changes(
+    db: Session, project: Project, story: UserStory, *, user, role: str | None, comment: str,
+    expected_version: int | None, background: BackgroundTasks | None,
+) -> AgentRun:
+    """Decisión HITL «pedir cambios»: se registra y el agente refina la HU con el comentario como instrucción."""
+    _provider_identity()  # sin agente configurado, 503 antes de registrar nada
+    hitl.decide(db, project, story, user=user, role=role, decision="pedir_cambios", comment=comment,
+                expected_version=expected_version)
+    actor = Actor(kind="user", name=user.name, user_id=user.id, is_admin=user.is_admin, project_role=role)
+    return start_refinement(db, project, story, actor=actor, user_id=user.id, instructions=comment, background=background)
+
+
 # ---------- helpers ----------
 
 def _provider_identity() -> tuple[str, str | None]:
@@ -619,6 +762,10 @@ __all__ = [
     "execute_generation",
     "execute_generation_from_documents",
     "execute_refinement",
+    "execute_reviews",
+    "request_changes",
+    "start_pending_reviews",
+    "start_review",
     "external_id_for",
     "run_out",
     "start_backlog_sizing",

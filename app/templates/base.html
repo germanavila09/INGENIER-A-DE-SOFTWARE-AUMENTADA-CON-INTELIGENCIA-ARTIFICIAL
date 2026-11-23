@@ -32,6 +32,8 @@
     {% if project %}
       <div class="nav-section">{{ project.key }} · {{ project.name }}</div>
       <a class="nav-link {{ 'active' if request.url.path == '/p/' ~ project.key }}" href="/p/{{ project.key }}">Dashboard</a>
+      {% set hp = hitl_pending(project) %}
+      <a class="nav-link {{ 'active' if request.url.path.endswith('/revision') }}" href="/p/{{ project.key }}/revision">Revisión humana{% if hp %}<span class="nav-count" title="HU que esperan una decisión">{{ hp }}</span>{% endif %}</a>
       <a class="nav-link {{ 'active' if request.url.path.startswith('/p/' ~ project.key ~ '/backlog') or '/stories/' in request.url.path }}" href="/p/{{ project.key }}/backlog">Backlog</a>
       <a class="nav-link {{ 'active' if request.url.path.endswith('/board') }}" href="/p/{{ project.key }}/board">Tablero</a>
       <a class="nav-link {{ 'active' if request.url.path.endswith('/reports') }}" href="/p/{{ project.key }}/reports">Reportes</a>
