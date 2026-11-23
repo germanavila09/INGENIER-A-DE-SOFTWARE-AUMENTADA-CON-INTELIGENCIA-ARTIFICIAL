@@ -1,23 +1,47 @@
 # Ingeniería de Software Aumentada con Inteligencia Artificial
 
-Proyecto base que consume el bucket de Cloud Storage **`gs://adk_ing`** (proyecto GCP `servi-modelos-ia-dev`) con [Google ADK](https://google.github.io/adk-docs/) y Gemini:
+Agentes de IA para ingeniería de software: generan historias de usuario (HU) desde documentos, las revisan con
+varios agentes, las estiman y las llevan a un backlog **con revisión humana (HITL) en cada paso**. Hay dos formas de
+usarlo:
 
-- **Smart Product Backlog (`/spb`)**: interfaz web para el dueño de producto. Sube actas, notas y audios (se transcriben), lanza el análisis multiagente, muestra las historias propuestas con su evidencia, tipo (HU-IA / tradicional) y prioridad sugerida, y permite aprobar, refinar, descartar, aprobar por épica, decidir los puntos críticos (HITL) y exportar el backlog. Incluye un asistente que conversa con `orquestador_hu`.
+| | SmartBacklogIA local (`smartbacklog/`) | Motor multiagente con ADK (raíz del repo) |
+|---|---|---|
+| Para qué | Probar el flujo completo, hacer demos, que otras personas lo usen | Trabajar sobre el bucket `gs://adk_ing` y depurar los agentes |
+| Qué necesitas | Docker Desktop y una API key de Gemini ([AI Studio](https://aistudio.google.com/apikey)) | Python 3.10+, `gcloud` y permisos en `servi-modelos-ia-dev` |
+| Cómo se arranca | `smartbacklog\windows\INICIAR.cmd` | `python adk_web.py` |
+| GCP | No | Bucket y Vertex AI |
+
+**Si vas a probarlo, empieza por SmartBacklogIA:** sección [SmartBacklogIA local](#smartbacklogia-local-con-revisión-humana-smartbacklog).
+
+Componentes:
+
+- **SmartBacklogIA (`smartbacklog/`)**: aplicación web con login, roles por proyecto y Postgres. Las HU pasan por
+  cinco etapas (generación, clasificación, estimación, priorización, backlog) y cada una por una revisión
+  multiagente con decisión humana por nivel de riesgo. Basada en [diegodgt02-ai/SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA).
+- **Ruta de historias (`/flujo`)** y **Smart Product Backlog (`/spb`)**: interfaces web del motor ADK. Suben actas,
+  notas, BPMN y audios (se transcriben), lanzan el análisis multiagente y permiten aprobar, refinar, descartar,
+  decidir los puntos críticos (HITL), estimar y exportar el backlog.
 - **`orquestador_hu`**: sistema **multiagente** que descubre proyectos en el bucket, analiza sus historias de usuario (INVEST, ambigüedades, impacto de arquitectura, casos de prueba), detecta cuándo se necesita una decisión humana (HITL), se detiene y continúa tras la aprobación, con máquina de estados persistida, versionado y auditoría completa. Arquitectura en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 - **`agente_bucket`**: agente que busca, lee y responde preguntas sobre los documentos del bucket (PDF, Word, Excel, PowerPoint, CSV, texto), citando documento y página.
 - **`adk-ing`**: CLI y librería Python para listar, leer y sincronizar los objetos del bucket.
 
 ```
 .
-├── adk_web.py              # lanza ADK Web + API (/api) + Smart Product Backlog (/spb)
+├── adk_web.py              # lanza ADK Web + API (/api) + Ruta de historias (/flujo) + SPB (/spb)
+├── web/flujo/index.html    # Ruta de historias: todas las etapas en una interfaz
 ├── web/spb/index.html      # front del Smart Product Backlog
 ├── agents/                 # apps que muestra ADK Web
 │   ├── orquestador_hu/     # sistema multiagente de historias de usuario (root_agent = orquestador)
 │   └── agente_bucket/      # agente de preguntas sobre documentos
-├── docs/ARQUITECTURA.md    # arquitectura multiagente, diagramas Mermaid, HITL, estados
+├── docs/                   # ARQUITECTURA.md (multiagente, Mermaid, HITL, estados), metodo_estimacion.md,
+│                           # integracion_smartbacklog.md y diagramas
+├── deploy/                 # despliegue de pruebas en Cloud Run (desplegar_gcp.ps1, pausar_gcp.ps1)
 ├── ejemplos/projects/      # proyectos de ejemplo: PRJ001 (dengue), PRJ002, proyecto sin project.yaml
 ├── docs_ejemplo/           # documentos ficticios para agente_bucket y la demo de SmartBacklogIA
 ├── smartbacklog/           # SmartBacklogIA: backlog con revisión humana (HITL), 5 etapas, estimación
+│   ├── app/                # FastAPI + plantillas; services/hitl.py (política HITL), estimation.py, fpa.py
+│   ├── windows/            # INICIAR.cmd, CONFIGURAR_LOCAL.cmd, DETENER.cmd y LEEME.md (guía para probadores)
+│   └── docker-compose.yml  # Postgres + app en local
 ├── src/hu_multiagent/      # código del sistema multiagente
 │   ├── agents/             # orchestrator, project_discovery, ingestion, story_analyst,
 │   │                       # architecture, qa, aggregator, hitl_evaluator (agent.py + prompt.py)
@@ -32,18 +56,52 @@ Proyecto base que consume el bucket de Cloud Storage **`gs://adk_ing`** (proyect
 │   ├── documentos.py       # extracción de texto por páginas/hojas/diapositivas
 │   ├── indice.py           # índice de búsqueda BM25 que detecta documentos nuevos
 │   └── cli.py              # adk-ing ls | cat | sync
-├── tests/                  # pruebas sin red
+├── tests/                  # pruebas sin red del motor ADK
+├── .github/workflows/      # CI: pruebas del motor y de smartbacklog/
 ├── .env.example
 └── pyproject.toml
 ```
 
-## Requisitos
+## SmartBacklogIA local con revisión humana (`smartbacklog/`)
+
+La forma recomendada de probar el flujo completo. [SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA)
+vive en `smartbacklog/` como componente, con un solo login, roles por proyecto y su base de datos. Le agregamos la
+revisión multiagente y la política HITL del motor de este repositorio, adaptadas a cada historia:
+
+- **Revisión humana (HITL) como función central:** analista → arquitectura ∥ QA ∥ estimación revisan cada HU; una
+  política en código le asigna nivel 0/1/2; el nivel 2 solo lo decide el product owner y los niveles 1 y 0 el
+  product owner o el scrum master. Decisiones: aprobar (con o sin la propuesta), pedir cambios, falta
+  información, descartar, comentar. Nada se aprueba solo.
+- **Cinco etapas:** generación desde documentos, clasificación HU-IA / HU-Tradicional, estimación (puntos de
+  historia por factores junto a puntos de función IFPUG), priorización y backlog final.
+- **Local, sin GCP:** Postgres en Docker, documentos en una carpeta y Gemini con API key.
+
+En Windows, con Docker Desktop y una API key de [AI Studio](https://aistudio.google.com/apikey):
+
+```powershell
+cd smartbacklog\windows
+.\INICIAR.cmd
+```
+
+La primera vez pide la API key (no se muestra y queda en `smartbacklog\.env`, que git ignora), construye la app,
+crea usuarios de prueba y abre http://localhost:8000. Allí: **Agentes IA** genera HU desde los documentos,
+**Revisión humana** es la bandeja de decisiones y **Estimación** muestra los puntos de historia por factores junto
+a los puntos de función. En Linux o macOS: crea `smartbacklog/.env` con la sección «Modo local» de
+`smartbacklog/.env.example`, luego `cd smartbacklog && docker compose up --build -d` y, una vez,
+`docker compose exec app python scripts/seed.py` (usuarios de prueba).
+
+Guía para probadores, usuarios de prueba y demo con `docs_ejemplo`: [smartbacklog/windows/LEEME.md](smartbacklog/windows/LEEME.md).
+Detalle técnico: [smartbacklog/README.md](smartbacklog/README.md).
+
+## Motor multiagente con ADK
+
+### Requisitos
 
 - Python 3.10+
 - [Google Cloud CLI](https://cloud.google.com/sdk/docs/install)
 - Una identidad con **`roles/storage.objectViewer`** sobre `gs://adk_ing` (el permiso mínimo es `storage.objects.list` + `storage.objects.get`) y, para el agente, **`roles/aiplatform.user`** en el proyecto.
 
-## Instalación
+### Instalación
 
 ```bash
 python -m venv .venv
@@ -54,8 +112,6 @@ cp .env.example .env               # Windows: copy .env.example .env
 gcloud auth application-default login
 gcloud auth application-default set-quota-project servi-modelos-ia-dev
 ```
-
-## Uso
 
 ### CLI
 
@@ -155,7 +211,7 @@ El botón **Asistente** conversa con `orquestador_hu` usando la API estándar de
 
 ### ADK Web con el agente del bucket
 
-`python adk_web.py` revisa credenciales y acceso a los documentos, levanta el servidor en http://127.0.0.1:8000 y abre el navegador en `/spb`. Para el chat de ADK entra a http://127.0.0.1:8000/dev-ui y elige **agente_bucket** u **orquestador_hu** en el selector.
+`python adk_web.py` revisa credenciales y acceso a los documentos, levanta el servidor en http://127.0.0.1:8000 y abre el navegador en **Ruta de historias** (`/flujo`); el Smart Product Backlog sigue en `/spb`. Para el chat de ADK entra a http://127.0.0.1:8000/dev-ui y elige **agente_bucket** u **orquestador_hu** en el selector.
 
 Opciones: `--port 8080`, `--no-browser`, `--skip-checks`. También funciona el comando estándar de ADK desde la raíz: `adk web agents` (o `adk run agents/agente_bucket` en la terminal).
 
@@ -191,30 +247,6 @@ Subir requiere `roles/storage.objectCreator`; el agente solo necesita lectura.
 
 > **Repo dentro de Google Drive:** crea el entorno virtual fuera de la carpeta sincronizada (o usa el Python global) y pon `ADK_SESSION_URI=memory://` en el `.env`, para que Drive no intente sincronizar miles de archivos ni la base SQLite de sesiones.
 
-## SmartBacklogIA local con revisión humana (`smartbacklog/`)
-
-La forma recomendada de probar el flujo completo. [SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA)
-vive en `smartbacklog/` como componente, con un solo login, roles por proyecto y su base de datos, y el motor
-multiagente de este repositorio como revisión de cada historia:
-
-- **Revisión humana (HITL) como función central:** analista → arquitectura ∥ QA ∥ estimación revisan cada HU; una
-  política en código le asigna nivel 0/1/2; el nivel 2 solo lo decide el product owner y los niveles 1 y 0 el
-  product owner o el scrum master. Decisiones: aprobar (con o sin la propuesta), pedir cambios, falta
-  información, descartar, comentar. Nada se aprueba solo.
-- **Cinco etapas:** generación desde documentos, clasificación HU-IA / HU-Tradicional, estimación (puntos de
-  historia por factores junto a puntos de función IFPUG), priorización y backlog final.
-- **Local, sin GCP:** Postgres en Docker, documentos en una carpeta y Gemini con API key.
-
-En Windows, con Docker Desktop y una API key de [AI Studio](https://aistudio.google.com/apikey):
-
-```powershell
-cd smartbacklog\windows
-.\INICIAR.cmd
-```
-
-Guía para probadores, usuarios de prueba y demo con `docs_ejemplo`: [smartbacklog/windows/LEEME.md](smartbacklog/windows/LEEME.md).
-Detalle técnico: [smartbacklog/README.md](smartbacklog/README.md).
-
 ## Integración con SmartBacklogIA (versión anterior, por API)
 
 `python adk_web.py` abre **Ruta de historias** (`/flujo`): una sola interfaz para documentos, análisis
@@ -226,18 +258,30 @@ Detalle en [docs/integracion_smartbacklog.md](docs/integracion_smartbacklog.md).
 
 ## Despliegue para pruebas con otras personas
 
-`deploy\desplegar_gcp.ps1` publica Ruta de historias y SmartBacklogIA en Cloud Run (`servi-modelos-ia-dev`), con
-usuario y clave por tester. Detalle, costos y cómo pausar en [deploy/README.md](deploy/README.md).
+Hoy la forma recomendada es que cada persona corra `smartbacklog/` en su computador
+([smartbacklog/windows/LEEME.md](smartbacklog/windows/LEEME.md)): no necesita permisos de GCP.
+
+`deploy\desplegar_gcp.ps1` publica en Cloud Run (`servi-modelos-ia-dev`) la integración anterior: Ruta de
+historias y SmartBacklogIA (rama `gcp-vertex`, desde la carpeta que indica `-RutaSmartBacklog`), con usuario y
+clave por tester. No incluye la revisión humana de `smartbacklog/`. Cloud SQL tiene costo fijo mientras existe:
+`deploy\pausar_gcp.ps1 -Accion pausar` lo detiene. Detalle y costos en [deploy/README.md](deploy/README.md).
 
 ## Pruebas
 
 ```bash
-pytest -q
+pytest -q                                                              # motor ADK
+cd smartbacklog && pip install -r requirements.txt && pytest -q        # SmartBacklogIA (180 pruebas)
 ```
 
-Las pruebas no requieren credenciales (incluidas las de la API del Smart Product Backlog: proyectos, carga y transcripción de audio, análisis en segundo plano, refinamiento, aprobación por épica, decisiones críticas y exportación): usan los documentos de `docs_ejemplo/` y `ejemplos/projects/`, un cliente de GCS falso y modelos simulados que recorren los flujos reales de ADK. Para el orquestador cubren la política HITL, la máquina de estados, el método de estimación y su ajuste humano, la concurrencia (decisiones durante un análisis, aprobación de épicas, proyectos en paralelo, versión de historia y escrituras de otro proceso), el lector BPMN, el costo por ejecución, el modo demostración, el flujo completo de PRJ001 (pausa, APPROVED, REJECTED, MODIFIED con reanálisis), el versionado, la auditoría, el aislamiento entre proyectos, los reintentos, los errores fatales, los límites y la guardia que impide decisiones no humanas. También corren en GitHub Actions en cada push.
+Las de `smartbacklog/` usan SQLite y agentes simulados (sin credenciales ni red) y cubren la revisión multiagente,
+los niveles y permisos HITL, las decisiones, la etapa 1, la estimación, la priorización y las cinco etapas.
+
+Las pruebas no requieren credenciales (incluidas las de la API del Smart Product Backlog: proyectos, carga y transcripción de audio, análisis en segundo plano, refinamiento, aprobación por épica, decisiones críticas y exportación): usan los documentos de `docs_ejemplo/` y `ejemplos/projects/`, un cliente de GCS falso y modelos simulados que recorren los flujos reales de ADK. Para el orquestador cubren la política HITL, la máquina de estados, el método de estimación y su ajuste humano, la concurrencia (decisiones durante un análisis, aprobación de épicas, proyectos en paralelo, versión de historia y escrituras de otro proceso), el lector BPMN, el costo por ejecución, el modo demostración, el flujo completo de PRJ001 (pausa, APPROVED, REJECTED, MODIFIED con reanálisis), el versionado, la auditoría, el aislamiento entre proyectos, los reintentos, los errores fatales, los límites y la guardia que impide decisiones no humanas. Las dos suites corren en GitHub Actions en cada push (jobs `pytest` y `smartbacklog`).
 
 ## Variables de entorno
+
+Variables del motor ADK (`.env` en la raíz). Las de SmartBacklogIA están documentadas en
+[smartbacklog/.env.example](smartbacklog/.env.example) y las escribe `CONFIGURAR_LOCAL.cmd`.
 
 | Variable | Por defecto | Uso |
 |---|---|---|
