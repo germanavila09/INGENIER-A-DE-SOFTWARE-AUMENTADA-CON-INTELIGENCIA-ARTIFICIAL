@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Estimación de HU en SmartBacklogIA</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: una columna de lectura (~68ch) con una calculadora ancha al centro; las cartas de Fibonacci son la escala. */
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --ink: #172033; --muted: #5b6577; --line: #dde3ea;
+  --accent: #0f766e; --accent-soft: #dff3f0; --warn: #a85a00; --warn-soft: #fdf0dc;
+  --card: #ffffff; --card-ink: #172033;
+  --f-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e131a; --surface: #161d27; --ink: #e5eaf1; --muted: #9aa5b5; --line: #273141;
+  --accent: #2dd4bf; --accent-soft: #11332f; --warn: #f5a524; --warn-soft: #3a2a10;
+  --card: #1c2531; --card-ink: #e5eaf1; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e131a; --surface: #161d27; --ink: #e5eaf1; --muted: #9aa5b5; --line: #273141;
+  --accent: #2dd4bf; --accent-soft: #11332f; --warn: #f5a524; --warn-soft: #3a2a10;
+  --card: #1c2531; --card-ink: #e5eaf1; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 17px/1.55 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 40px 64px; display: grid; gap: 44px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(28px, 4.4vw, 40px); letter-spacing: -.02em; }
+h2 { font-size: 24px; letter-spacing: -.01em; }
+h3 { font-size: 17px; }
+p { margin: 0; }
+.eyebrow { font: 600 12px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.lead { font-size: 19px; color: var(--muted); }
+.mono { font-family: var(--f-mono); font-size: .88em; }
+.muted { color: var(--muted); }
+section { display: grid; gap: 16px; }
+a { color: var(--accent); }
+
+/* flujo */
+.flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+.step .who { font: 600 12px var(--f-mono); color: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+.step p { font-size: 15px; color: var(--muted); }
+
+/* calculadora */
+.calc { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: grid; gap: 22px; }
+.calc-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { font: 600 14px var(--f-body); border: 0; background: transparent; color: var(--ink); padding: 8px 14px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.presets button { font: 14px var(--f-body); border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.presets button:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.calc-body { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; }
+.factors { display: grid; gap: 14px; }
+.factor { display: grid; gap: 4px; }
+.factor-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.factor-top label { font-weight: 600; }
+.factor-top .w { font: 13px var(--f-mono); color: var(--muted); }
+.factor .help { font-size: 13.5px; color: var(--muted); }
+.factor-row { display: flex; align-items: center; gap: 12px; }
+.factor-row input { flex: 1; accent-color: var(--accent); min-width: 0; }
+.factor-row output { font: 600 18px var(--f-mono); width: 1.6em; text-align: right; font-variant-numeric: tabular-nums; }
+.factor.hot output { color: var(--warn); }
+.result { display: grid; gap: 16px; align-content: start; }
+.formula { font: 14px/1.7 var(--f-mono); background: var(--bg); border-radius: 10px; padding: 12px 14px; overflow-x: auto; font-variant-numeric: tabular-nums; }
+.formula b { color: var(--accent); }
+.big { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.big .pts { font: 700 56px/1 var(--f-display); color: var(--accent); font-variant-numeric: tabular-nums; }
+.big .unit { font-size: 18px; color: var(--muted); }
+.notes { display: grid; gap: 8px; }
+.note { font-size: 15px; border-radius: 8px; padding: 8px 12px; background: var(--bg); }
+.note.warn { background: var(--warn-soft); color: var(--warn); }
+
+/* cartas de planning poker = escala de Fibonacci */
+.deck { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.cardp { aspect-ratio: 5 / 7; max-width: 100%; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--card-ink);
+  display: grid; place-items: center; position: relative; font: 700 clamp(18px, 3vw, 28px) var(--f-display); transition: transform .2s, background .2s, border-color .2s; }
+.cardp small { position: absolute; top: 6px; left: 8px; font: 600 10px var(--f-mono); color: var(--muted); }
+.cardp.range { border-color: var(--accent); background: var(--accent-soft); }
+.cardp.pick { background: var(--accent); color: var(--surface); border-color: var(--accent); transform: translateY(-6px); }
+.cardp.pick small { color: var(--surface); }
+.deck-cap { font-size: 13px; color: var(--muted); }
+
+/* bandas bruto → puntos */
+.bands { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.band { padding: 10px 8px; text-align: center; border-left: 1px solid var(--line); display: grid; gap: 2px; }
+.band:first-child { border-left: 0; }
+.band .r { font: 12.5px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.band .p { font: 700 20px var(--f-display); }
+.band.on { background: var(--accent-soft); }
+.band.on .p { color: var(--accent); }
+
+/* tablas */
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { padding: 9px 12px; text-align: left; border-top: 1px solid var(--line); vertical-align: top; }
+thead th { border-top: 0; font: 600 12px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td.n, th.n { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tfoot td { font-weight: 600; }
+
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.compare > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 8px; align-content: start; }
+.compare ul { margin: 0; padding-left: 18px; font-size: 15px; color: var(--muted); display: grid; gap: 4px; }
+.foot { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; }
+
+@media (max-width: 760px) {
+  .flow, .compare, .calc-body { grid-template-columns: 1fr; }
+  .bands { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .band:nth-child(4) { border-left: 0; }
+  .band:nth-child(n+4) { border-top: 1px solid var(--line); }
+}
+@media (prefers-reduced-motion: reduce) { .cardp { transition: none; } }
+</style>
+</head><body>
+
+<div class="wrap">
+  <header class="prose" style="display:grid;gap:14px">
+    <span class="eyebrow">SmartBacklogIA · etapa 3</span>
+    <h1>¿Cuántos puntos vale una historia de usuario?</h1>
+    <p class="lead">El agente de IA no inventa el número. Puntúa unos pocos factores de 1 a 5 y explica por qué; una fórmula
+      fija y versionada los convierte en puntos de Fibonacci; y una persona aprueba el resultado en la revisión humana.</p>
+  </header>
+
+  <section>
+    <h2>Quién hace qué</h2>
+    <div class="flow">
+      <div class="step"><span class="who">1 · Agente de estimación</span><h3>Clasifica y puntúa</h3>
+        <p>Decide si la HU es HU-IA o HU-Tradicional y puntúa cada factor de su método de 1 a 5, con una justificación.</p></div>
+      <div class="step"><span class="who">2 · El sistema</span><h3>Calcula</h3>
+        <p>Suma ponderada, conversión a Fibonacci, rango y spike. Mismo código siempre: el resultado es reproducible y auditable.</p></div>
+      <div class="step"><span class="who">3 · Una persona</span><h3>Aprueba</h3>
+        <p>En «Revisión humana» ve factores, puntos y justificación, y aprueba, pide cambios o comenta. Nada se aprueba solo.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="calc-title">
+    <h2 id="calc-title">Pruébalo</h2>
+    <div class="calc">
+      <div class="calc-head">
+        <div class="seg" role="group" aria-label="Tipo de historia">
+          <button type="button" id="t-trad" aria-pressed="true">HU-Tradicional</button>
+          <button type="button" id="t-ia" aria-pressed="false">HU-IA</button>
+        </div>
+        <div class="presets" aria-label="Ejemplos">
+          <button type="button" data-preset="carga">Ej.: cargar documentos al bucket</button>
+          <button type="button" data-preset="extraer">Ej.: generar HU con un LLM</button>
+        </div>
+      </div>
+      <div class="calc-body">
+        <div class="factors" id="factors"></div>
+        <div class="result">
+          <div class="big"><span class="pts" id="pts">3</span><span class="unit">puntos de historia</span><span class="mono muted" id="method"></span></div>
+          <div class="deck" id="deck" aria-label="Escala de Fibonacci"></div>
+          <div class="deck-cap" id="deck-cap"></div>
+          <div class="formula" id="formula" aria-live="polite"></div>
+          <div class="notes" id="notes"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>De puntaje bruto a puntos</h2>
+    <p class="prose">El puntaje bruto va de 1 a 5. Se reparte en seis tramos iguales, uno por carta:
+      <span class="mono">índice = redondeo((bruto − 1) × 5 / 4)</span>. Bruto 1 da 1 punto y bruto 5 da 13 puntos.</p>
+    <div class="bands" id="bands"></div>
+    <p class="prose muted" style="font-size:15px">Reglas extra solo para HU-IA: un riesgo de 4 o más sube un escalón (la
+      incertidumbre de un modelo no se reparte linealmente), y datos o riesgo de 4 o más piden un <strong>spike</strong>
+      de 2 puntos aparte: un timebox para experimentar antes de comprometer la historia.</p>
+  </section>
+
+  <section>
+    <h2>Los dos métodos</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Factor</th><th>Qué mide (1 → 5)</th><th class="n">Peso</th></tr></thead>
+      <tbody id="weights"></tbody>
+    </table></div>
+    <p class="prose muted" style="font-size:15px">Una HU-Tradicional se estima por complejidad, esfuerzo e incertidumbre. Una
+      HU-IA cambia la pregunta: pesan más los datos y el modelo, y aparecen la evaluación y el riesgo de no alcanzar la
+      calidad esperada. Cambiar un peso es cambiar la versión del método (<span class="mono">_v1</span> → <span class="mono">_v2</span>),
+      así una estimación siempre se puede reconstruir.</p>
+  </section>
+
+  <section>
+    <h2>Cómo encaja con la revisión humana</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Situación</th><th>Efecto en la revisión</th></tr></thead>
+      <tbody>
+        <tr><td>HU-IA que pide spike (datos o riesgo ≥ 4)</td><td>Motivo <span class="mono">SPIKE_REQUIRED</span>: nivel 1, la revisan el product owner o el scrum master</td></tr>
+        <tr><td>El agente no entrega factores válidos</td><td>Motivo <span class="mono">ESTIMATION_INCOMPLETE</span>: nivel 1 y la HU queda sin estimar hasta que alguien la complete</td></tr>
+        <tr><td>La HU no tenía tipo</td><td>Al aprobar, toma el tipo que propuso el agente: eso alimenta la etapa 2 (clasificación)</td></tr>
+        <tr><td>Se cambia la prioridad, el estado o el tamaño</td><td>La revisión sigue vigente; solo un cambio de contenido (título, rol, necesidad, beneficio, criterios) la reabre</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Esfuerzo y tamaño: dos medidas, no una</h2>
+    <div class="compare">
+      <div><h3>Puntos de historia (este método)</h3>
+        <ul><li>Miden esfuerzo relativo del equipo.</li><li>Factores por tipo de HU, escala de Fibonacci.</li>
+          <li>Sirven para planear el sprint y la velocidad.</li></ul></div>
+      <div><h3>Puntos de función IFPUG (etapa 3)</h3>
+        <ul><li>Miden tamaño funcional del software, no esfuerzo.</li><li>Un agente identifica datos y transacciones; el código cuenta.</li>
+          <li>Se suman los puntos no funcionales de las restricciones (seguridad, privacidad…).</li></ul></div>
+    </div>
+    <p class="prose">Ejemplo real del proyecto demo, «Subir transcripción de reunión»:</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Función</th><th>Tipo</th><th class="n">DET</th><th class="n">RET/FTR</th><th>Complejidad</th><th class="n">FP</th></tr></thead>
+      <tbody>
+        <tr><td>Transcripción</td><td class="mono">ILF</td><td class="n">6</td><td class="n">1</td><td>Baja</td><td class="n">7</td></tr>
+        <tr><td>Subir transcripción</td><td class="mono">EI</td><td class="n">5</td><td class="n">1</td><td>Baja</td><td class="n">3</td></tr>
+        <tr><td>Vista previa del texto</td><td class="mono">EQ</td><td class="n">3</td><td class="n">1</td><td>Baja</td><td class="n">3</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="5">Puntos de función sin ajustar (UFP)</td><td class="n">13</td></tr></tfoot>
+    </table></div>
+    <p class="prose muted" style="font-size:15px">Pesos IFPUG (baja / media / alta): ILF 7/10/15 · EIF 5/7/10 · EI 3/4/6 · EO 4/5/7 · EQ 3/4/6.
+      En la app, la vista «Estimación» muestra las dos medidas lado a lado para cada HU.</p>
+  </section>
+
+  <p class="foot">Métodos <span class="mono">fibonacci_tradicional_v1</span> e <span class="mono">ia_factores_v1</span>
+    (<span class="mono">app/services/estimation.py</span>) y <span class="mono">fpa_ifpug_ufp_v1</span> (<span class="mono">app/services/fpa.py</span>)
+    de SmartBacklogIA. La calculadora usa la misma fórmula que el sistema.</p>
+</div>
+
+<script>
+(() => {
+  const FIB = [1, 2, 3, 5, 8, 13];
+  const METHODS = {
+    trad: { id: "fibonacci_tradicional_v1", label: "HU-Tradicional", factors: [
+      ["complejidad", 0.4, "reglas de negocio, pantallas o flujos y casos de error (1 trivial · 5 muy complejo)"],
+      ["esfuerzo", 0.4, "construcción e integración: APIs, base de datos, pruebas (1 horas · 5 semanas)"],
+      ["incertidumbre", 0.2, "claridad del requisito (1 criterios cerrados · 5 ambiguo o por definir)"]] },
+    ia: { id: "ia_factores_v1", label: "HU-IA", factors: [
+      ["datos", 0.25, "disponibilidad y calidad de datos para entrenar o evaluar (1 listos · 5 no existen o son malos)"],
+      ["modelo", 0.25, "complejidad del modelo o del prompt (1 clasificación simple · 5 multimodal o razonamiento largo)"],
+      ["evaluacion", 0.15, "validar con métricas o conjunto de referencia (1 verificación directa · 5 evaluación humana extensa)"],
+      ["riesgo", 0.15, "probabilidad de no alcanzar el resultado: precisión, alucinaciones, sesgo (1 bajo · 5 alto)"],
+      ["integracion", 0.2, "trabajo tradicional alrededor del modelo: API, UI, seguridad, auditoría (1 mínimo · 5 mucho)"]] },
+  };
+  const PRESETS = {
+    carga: { type: "trad", v: { complejidad: 2, esfuerzo: 3, incertidumbre: 2 } },
+    extraer: { type: "ia", v: { datos: 3, modelo: 4, evaluacion: 4, riesgo: 4, integracion: 3 } },
+  };
+  let type = "trad";
+  const values = { complejidad: 2, esfuerzo: 3, incertidumbre: 2, datos: 3, modelo: 4, evaluacion: 4, riesgo: 4, integracion: 3 };
+  const $ = (id) => document.getElementById(id);
+  const clamp = (i) => Math.max(0, Math.min(FIB.length - 1, i));
+  const fmt = (x) => x.toFixed(2);
+
+  function estimate() {
+    const m = METHODS[type];
+    let raw = 0;
+    for (const [k, w] of m.factors) raw += w * values[k];   // mismo orden y aritmética que estimation.py
+    const base = Math.floor((raw - 1) * (FIB.length - 1) / 4 + 0.5);
+    let idx = base, bump = false, spike = false;
+    if (type === "ia") {
+      if (values.riesgo >= 4) { idx += 1; bump = true; }
+      spike = values.datos >= 4 || values.riesgo >= 4;
+    }
+    idx = clamp(idx);
+    return { raw, base: clamp(base), idx, bump, spike };
+  }
+
+  function buildFactors() {
+    const m = METHODS[type];
+    $("factors").innerHTML = m.factors.map(([k, w, help]) => `
+      <div class="factor" id="f-${k}">
+        <div class="factor-top"><label for="r-${k}">${k}</label><span class="w">peso ${w.toFixed(2)}</span></div>
+        <div class="factor-row"><input type="range" id="r-${k}" min="1" max="5" step="1" value="${values[k]}" aria-describedby="h-${k}"><output id="o-${k}" for="r-${k}">${values[k]}</output></div>
+        <div class="help" id="h-${k}">${help}</div>
+      </div>`).join("");
+    for (const [k] of m.factors) $("r-" + k).addEventListener("input", (e) => { values[k] = Number(e.target.value); render(); });
+    $("weights").innerHTML = [...METHODS.trad.factors.map((f) => ["HU-Tradicional", ...f]), ...METHODS.ia.factors.map((f) => ["HU-IA", ...f])]
+      .map(([t, k, w, h]) => `<tr><td><strong>${k}</strong><div class="muted" style="font-size:13px">${t}</div></td><td>${h}</td><td class="n">${w.toFixed(2)}</td></tr>`).join("");
+    $("t-trad").setAttribute("aria-pressed", String(type === "trad"));
+    $("t-ia").setAttribute("aria-pressed", String(type === "ia"));
+  }
+
+  function render() {
+    const m = METHODS[type];
+    const r = estimate();
+    for (const [k] of m.factors) {
+      $("o-" + k).textContent = values[k];
+      $("f-" + k).classList.toggle("hot", type === "ia" && (k === "datos" || k === "riesgo") && values[k] >= 4);
+    }
+    $("pts").textContent = FIB[r.idx];
+    $("method").textContent = m.id;
+    $("deck").innerHTML = FIB.map((p, i) => {
+      const cls = i === r.idx ? "pick" : (Math.abs(i - r.idx) === 1 ? "range" : "");
+      return `<div class="cardp ${cls}" aria-label="${p} puntos${i === r.idx ? ', elegido' : ''}"><small>${p}</small>${p}</div>`;
+    }).join("");
+    $("deck-cap").textContent = `Rango: ${FIB[clamp(r.idx - 1)]}–${FIB[clamp(r.idx + 1)]} puntos (cartas vecinas).`;
+    const terms = m.factors.map(([k, w]) => `${w.toFixed(2)}×${values[k]}`).join(" + ");
+    const idxCalc = (r.raw - 1) * 5 / 4;
+    $("formula").innerHTML =
+      `bruto  = ${terms}<br>       = <b>${fmt(r.raw)}</b><br>` +
+      `índice = redondeo((${fmt(r.raw)} − 1) × 5/4) = redondeo(${idxCalc.toFixed(2)}) = ${r.base}` +
+      (r.bump ? `<br>riesgo ≥ 4 → índice ${r.base} + 1 = ${r.idx}` : "") +
+      `<br>puntos = Fibonacci[${r.idx}] = <b>${FIB[r.idx]}</b>`;
+    const notes = [];
+    if (r.bump) notes.push(`<div class="note warn">Riesgo ${values.riesgo}/5: sube un escalón de Fibonacci.</div>`);
+    if (r.spike) notes.push(`<div class="note warn">Spike de 2 puntos aparte (datos ${values.datos}/5, riesgo ${values.riesgo}/5). En la revisión humana aparece como nivel 1.</div>`);
+    if (!notes.length) notes.push(`<div class="note">Sin reglas extra: el resultado sale directo de la suma ponderada.</div>`);
+    $("notes").innerHTML = notes.join("");
+    const lo = [1, 1.4, 2.2, 3.0, 3.8, 4.6], hi = [1.4, 2.2, 3.0, 3.8, 4.6, 5];
+    $("bands").innerHTML = FIB.map((p, i) => `<div class="band ${i === r.base ? 'on' : ''}"><span class="r">${lo[i].toFixed(1)}–${hi[i].toFixed(1)}${i === 5 ? '' : ''}</span><span class="p">${p}</span></div>`).join("");
+  }
+
+  $("t-trad").addEventListener("click", () => { type = "trad"; buildFactors(); render(); });
+  $("t-ia").addEventListener("click", () => { type = "ia"; buildFactors(); render(); });
+  document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+    const p = PRESETS[b.dataset.preset]; type = p.type; Object.assign(values, p.v); buildFactors(); render();
+  }));
+  buildFactors(); render();
+})();
+</script>
+</body></html>
