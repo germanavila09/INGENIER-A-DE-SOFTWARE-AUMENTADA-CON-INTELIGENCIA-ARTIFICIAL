@@ -1,5 +1,13 @@
 # Smart Product Backlog — MVP
 
+> **Inicio rápido en Windows:** `windows\INICIAR.cmd` (Docker Desktop + una API key de Gemini). Guía para
+> probadores, usuarios de prueba y demo paso a paso en [windows/LEEME.md](windows/LEEME.md).
+>
+> Componente del repositorio del curso. Proyecto original:
+> [diegodgt02-ai/SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA) (Diego Carabali y equipo),
+> con su historial. Aquí se le agregó la revisión humana (HITL) multiagente como función central, la vista de
+> estimación y priorización y el modo local con Gemini por API key.
+
 Plataforma de gestión de historias de usuario (HU) para el Smart Product Backlog del curso.
 La IA la hacen agentes Google ADK: agentes externos que se conectan a esta API, o los agentes embebidos
 (Gemini) que generan, refinan y dimensionan HU (sección 4). Sin agentes configurados (`AGENT_PROVIDER=none`)
