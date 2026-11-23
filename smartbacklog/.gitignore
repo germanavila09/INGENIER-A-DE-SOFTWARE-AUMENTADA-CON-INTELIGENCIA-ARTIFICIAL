@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.gcp
+.env.local
+# Claves de cuentas de servicio de GCP (AGENT_DOCS_SOURCE=gcs) y cookies de los ejemplos con curl
+secrets/
+cookies.txt
+*.db
+# Archivos de Claude (no se suben: configuración e instrucciones del asistente)
+.claude/
+CLAUDE.md
+.ruff_cache/
+
+# Documentos reales de los proyectos (los ejemplos de documents/PAGO sí se versionan)
+documents/*
+!documents/README.md
+!documents/PAGO/
+documents/PAGO/*
+!documents/PAGO/proceso-pago.bpmn
+!documents/PAGO/reunion.md

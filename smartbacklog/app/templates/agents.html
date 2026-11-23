@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ project.key }} · Agentes IA{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Agentes IA</h1>
+    <p class="muted">Generación y refinamiento de HU con el modelo configurado. Las HU nuevas entran en «Borrador»; el agente nunca aprueba etapas ni pasa HU a «Lista».</p>
+  </div>
+</div>
+
+<div class="grid grid-2" style="margin-bottom:16px;align-items:start">
+  <section class="card">
+    <div class="card-head"><h2>Estado del proveedor</h2></div>
+    {% if status.configured %}
+      <span class="badge ok">Configurado</span>
+      <p class="small" style="margin-top:10px">Proveedor <strong>{{ status.provider }}</strong> · modelo <span class="mono">{{ status.model }}</span> · ejecución <span class="mono">{{ status.execution }}</span>{% if status.backend %} · <span class="mono">{{ status.backend }}</span>{% endif %}</p>
+    {% else %}
+      <span class="badge pending">No configurado</span>
+      <p class="small muted" style="margin-top:10px">{{ status.reason }}</p>
+    {% endif %}
+    <p class="small muted" style="margin-top:12px">Documentos disponibles en <span class="mono">{{ docs_location or project.key ~ '/' }}</span>: {{ documents|length }}</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Documentos · {{ docs_label }}</h2></div>
+    {% if docs_location %}<p class="small muted mono" style="margin:0 0 8px">{{ docs_location }}</p>{% endif %}
+    {% if docs_error %}
+      <p class="small" style="color:var(--danger)">{{ docs_error }}</p>
+    {% elif documents %}
+      <ul class="small" style="margin:0;padding-left:18px">{% for d in documents %}<li>{{ d.name }} <span class="muted">({{ (d.size / 1024)|round(1) }} KB)</span></li>{% endfor %}</ul>
+    {% else %}<p class="muted small">Aún no hay PDF, DOCX, BPMN, TXT ni MD en {{ 'el bucket' if status.docs_source == 'gcs' else 'la carpeta' }} del proyecto.</p>{% endif %}
+    {% if can_write and documents %}
+      <form method="post" action="/p/{{ project.key }}/agents/generate-from-documents" class="stack" style="margin-top:12px">
+        <p class="small muted" style="margin:0">El generador consulta al agente de documentos, que lista y lee los archivos de esta fuente y le responde con su contenido.</p>
+        <div class="field"><label for="d-instr">Instrucciones extra (opcional)</label><input id="d-instr" name="instructions" placeholder="Enfocarse en pagos"></div>
+        <div><button class="btn btn-primary" type="submit" {{ 'disabled' if not status.configured }}>Generar HU desde todos los documentos</button></div>
+      </form>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>Ejecuciones</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Tipo</th><th>Estado</th><th>Fuente</th><th>Resultado / error</th><th class="num">Tokens</th><th class="num">Costo USD</th><th>Inicio</th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr>
+        <td class="code">{{ r.id }}</td>
+        <td>{{ {'generate_stories': 'Generar HU', 'generate_from_docs': 'Generar HU (documentos)', 'refine_story': 'Refinar HU', 'size_story': 'Estimar HU', 'size_backlog': 'Estimar backlog', 'extract_context': 'Extraer grafo de contexto'}.get(r.kind, r.kind) }}</td>
+        <td><span class="badge {{ 'ok' if r.status == 'succeeded' else ('pending' if r.status in ('queued','running') else 'none') }}">{{ r.status }}</span></td>
+        <td class="small">{{ r.input_ref or '—' }}</td>
+        <td class="small">
+          {% if r.status == 'failed' %}<span style="color:var(--danger)">{{ r.error }}</span>
+          {% elif r.result and r.kind in ('generate_stories', 'generate_from_docs') %}creadas {{ r.result.created|length }} · actualizadas {{ r.result.updated|length }}{% if r.result.documents_read %} · leídos {{ r.result.documents_read|join(', ') }}{% endif %}
+          {% elif r.result and r.kind == 'extract_context' %}borrador v{{ r.result.version }} · {{ r.result.summary.feature }} funcionalidades, {{ r.result.summary.entity }} entidades, {{ r.result.summary.constraint }} restricciones
+          {% elif r.result and r.kind in ('size_story', 'size_backlog') %}{{ r.result.sized|length }} HU · {{ '%g'|format(r.result.function_points) }} FP
+          {% elif r.result %}{{ r.result.story }} · {{ r.result.notes or '' }}
+          {% else %}—{% endif %}
+        </td>
+        <td class="num">{{ r.tokens_in + r.tokens_out }}</td>
+        <td class="num">{{ '%.4f'|format(r.cost_usd) if r.cost_usd is not none else '—' }}</td>
+        <td class="small muted">{{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="muted">Sin ejecuciones todavía.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

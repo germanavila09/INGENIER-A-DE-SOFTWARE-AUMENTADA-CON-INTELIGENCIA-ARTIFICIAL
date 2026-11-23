@@ -1,0 +1,23 @@
+# Bucket de Cloud Storage + Gemini en Vertex AI con tus credenciales de gcloud (sin API key).
+#
+#   gcloud auth application-default login          # una vez, en tu equipo
+#   docker compose -p spb-gcp -f docker-compose.yml -f docker-compose.gcp.yml up --build -d
+#
+# Monta SOLO el archivo de Application Default Credentials, en modo lectura. En Windows se toma de
+# %APPDATA%\gcloud; en Linux o macOS define GCP_ADC_FILE=~/.config/gcloud/application_default_credentials.json.
+# La configuración del agente y del bucket va en .env (ver la sección «GCP» de .env.example).
+# Usa su propio nombre de proyecto (-p spb-gcp) para no mezclar la base con otra instalación, y no
+# publica Postgres en el equipo. SPB_PORT cambia el puerto de la app (por defecto 8000).
+services:
+  db:
+    ports: !reset []
+  app:
+    ports: !override
+      - "${SPB_PORT:-8000}:8000"
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /gcloud/application_default_credentials.json
+    volumes:
+      - type: bind
+        source: ${GCP_ADC_FILE:-${APPDATA}/gcloud/application_default_credentials.json}
+        target: /gcloud/application_default_credentials.json
+        read_only: true

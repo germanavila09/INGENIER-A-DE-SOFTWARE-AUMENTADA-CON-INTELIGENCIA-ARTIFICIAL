@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ project.key }} · Backlog{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Backlog</h1>
+    <p class="muted">Historias agrupadas por épica, con tipo, estimación y prioridad.</p>
+  </div>
+  <span class="spacer"></span>
+  <a class="btn" href="/p/{{ project.key }}/board">Ver tablero</a>
+</div>
+
+<form method="get" class="card filters">
+  <div class="field">
+    <label for="f-status">Estado</label>
+    <select id="f-status" name="status">
+      <option value="">Todos</option>
+      {% for k, label in status_labels.items() %}<option value="{{ k }}" {{ 'selected' if filters.status == k }}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-type">Tipo</label>
+    <select id="f-type" name="type">
+      <option value="">Todos</option>
+      {% for k, label in type_labels.items() %}<option value="{{ k }}" {{ 'selected' if filters.type == k }}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-sort">Ordenar por</label>
+    <select id="f-sort" name="sort">
+      <option value="priority" {{ 'selected' if filters.sort == 'priority' }}>Prioridad</option>
+      <option value="function_points" {{ 'selected' if filters.sort == 'function_points' }}>Puntos de función</option>
+      <option value="status" {{ 'selected' if filters.sort == 'status' }}>Estado</option>
+      <option value="title" {{ 'selected' if filters.sort == 'title' }}>Título</option>
+    </select>
+  </div>
+  <div class="row">
+    <button class="btn" type="submit">Aplicar</button>
+    <a class="btn btn-ghost" href="/p/{{ project.key }}/backlog">Limpiar</a>
+  </div>
+</form>
+
+{% if can_write %}
+<details class="new-story card" style="margin-bottom:12px">
+  <summary>✦ Generar HU desde documento con agente IA</summary>
+  <p class="small muted" style="margin:10px 0">{% if agent_status.configured %}Proveedor: <strong>{{ agent_status.provider }}</strong> · modelo {{ agent_status.model }}{% if agent_status.backend %} · {{ agent_status.backend }}{% endif %}{% else %}Agente no configurado: {{ agent_status.reason }}{% endif %}</p>
+  <form method="post" action="/p/{{ project.key }}/agents/generate" class="stack" style="margin-top:10px">
+    {% if docs_error %}<p class="small" style="color:var(--danger);margin:0">{{ docs_error }}</p>{% endif %}
+    <div class="field"><label for="g-file">Archivo del proyecto · {{ docs_label }} ({{ documents|length }} disponibles)</label>
+      <select id="g-file" name="filename"><option value="">— ninguno, usar texto pegado —</option>
+        {% for d in documents %}<option value="{{ d.name }}">{{ d.name }} ({{ (d.size / 1024)|round(1) }} KB)</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="g-text">…o texto pegado (reunión, requisitos)</label><textarea id="g-text" name="document_text" rows="5"></textarea></div>
+    <div class="form-grid">
+      <div class="field"><label for="g-source">Nombre de la fuente (solo texto pegado)</label><input id="g-source" name="source_name" placeholder="Reunión 12/09"></div>
+      <div class="field"><label for="g-instr">Instrucciones extra (opcional)</label><input id="g-instr" name="instructions" placeholder="Enfocarse en pagos"></div>
+    </div>
+    <div><button class="btn btn-primary" type="submit" {{ 'disabled' if not agent_status.configured }}>Generar HU</button></div>
+  </form>
+</details>
+
+<details class="new-story card">
+  <summary>+ Nueva historia de usuario</summary>
+  <form method="post" action="/p/{{ project.key }}/stories" class="form-grid" style="margin-top:14px">
+    <div class="field span-2"><label for="n-title">Título</label><input id="n-title" name="title" required minlength="3" placeholder="Como X quiero Y para Z"></div>
+    <div class="field"><label for="n-epic">Épica</label><input id="n-epic" name="epic" list="epic-list" placeholder="(sin épica)">
+      <datalist id="epic-list">{% for e in project.epics %}<option value="{{ e.title }}">{% endfor %}</datalist></div>
+    <div class="field"><label for="n-type">Tipo</label>
+      <select id="n-type" name="type"><option value="">Sin clasificar</option><option value="HU_IA">HU-IA</option><option value="HU_TRADICIONAL">HU-Tradicional</option></select></div>
+    <div class="field"><label for="n-role">Rol</label><input id="n-role" name="role_"></div>
+    <div class="field"><label for="n-need">Necesidad</label><input id="n-need" name="need"></div>
+    <div class="field span-2"><label for="n-benefit">Beneficio</label><input id="n-benefit" name="benefit"></div>
+    <div class="field span-2"><label for="n-criteria">Criterios de aceptación (markdown: checklist o Gherkin)</label><textarea id="n-criteria" name="criteria" rows="6" placeholder="- [ ] El usuario ve el error al rechazar la tarjeta"></textarea></div>
+    <div class="field span-2"><label for="n-just">Justificación del tipo</label><input id="n-just" name="type_justification"></div>
+    <div class="span-2"><button class="btn btn-primary" type="submit">Crear HU</button></div>
+  </form>
+</details>
+{% endif %}
+
+{% if groups %}
+  {% for g in groups %}
+  <section class="epic">
+    <div class="epic-head">
+      <h2>{{ g.epic.title if g.epic else 'Sin épica' }}</h2>
+      <span class="count">{{ g.stories|length }} HU</span>
+      <span class="spacer"></span>
+      <span class="small muted">{{ '%g'|format(g.stories|map(attribute='function_points')|select|sum) }} FP</span>
+    </div>
+    <div class="epic-body">
+      {% for s in g.stories %}
+      <div class="story-row">
+        <span class="code">{{ s.code }}</span>
+        <a class="story-title" href="/p/{{ project.key }}/stories/{{ s.code }}">{{ s.title }}</a>
+        <span>{{ m.type_badge(s.type) }}</span>
+        <span>{{ m.status_badge(s.status) }}</span>
+        <span>{{ m.fp(s.function_points) }}</span>
+        <span class="small muted">{{ '#' ~ s.priority_rank if s.priority_rank is not none else '—' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+{% else %}
+  <div class="empty">No hay historias con estos filtros.</div>
+{% endif %}
+{% endblock %}

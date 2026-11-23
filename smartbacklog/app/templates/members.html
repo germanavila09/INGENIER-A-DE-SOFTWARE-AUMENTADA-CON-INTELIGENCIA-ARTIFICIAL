@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ project.key }} · Miembros{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Miembros y roles</h1>
+    <p class="muted">Los roles controlan quién puede editar, asignar y mover HU.</p>
+  </div>
+</div>
+
+<div class="grid grid-2" style="align-items:start">
+  <section class="card">
+    <div class="card-head"><h2>Equipo</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Persona</th><th>Rol</th><th></th></tr></thead>
+      <tbody>
+      {% for mb in project.members %}
+        <tr>
+          <td><div class="row">{{ m.initials(mb.user.name) }}<div><div>{{ mb.user.name }}</div><div class="small muted">{{ mb.user.email }}</div></div></div></td>
+          <td><span class="badge none">{{ mb.role }}</span></td>
+          <td class="num">
+            {% if can_write %}
+            <form method="post" action="/p/{{ project.key }}/members/{{ mb.user_id }}/remove">
+              <button class="btn btn-ghost btn-sm btn-danger" type="submit">Quitar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Roles</h2></div>
+    <ul class="small" style="margin:0 0 16px;padding-left:18px;line-height:1.8">
+      <li><strong>Product owner</strong>: todo, incluida la aprobación HITL.</li>
+      <li><strong>Scrum master</strong>: editar, asignar, mover HU; aprobación HITL no incluida.</li>
+      <li><strong>Developer</strong>: mueve HU entre Lista, En progreso y En revisión.</li>
+      <li><strong>Stakeholder</strong>: sólo lectura.</li>
+    </ul>
+    {% if can_write %}
+    <form method="post" action="/p/{{ project.key }}/members" class="stack">
+      <div class="field"><label for="m-email">Correo del usuario</label><input id="m-email" name="email" type="email" required></div>
+      <div class="field"><label for="m-role">Rol</label>
+        <select id="m-role" name="role_">
+          <option value="developer">Developer</option>
+          <option value="scrum_master">Scrum master</option>
+          <option value="product_owner">Product owner</option>
+          <option value="stakeholder">Stakeholder</option>
+        </select></div>
+      <button class="btn btn-primary" type="submit">Agregar al proyecto</button>
+    </form>
+    {% else %}<p class="muted small">Sólo el product owner puede cambiar miembros.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% import "_hitl.html" as h with context %}
+{% block title %}{{ story.code }} · {{ story.title }}{% endblock %}
+{% block crumb %} / <a href="/p/{{ project.key }}/backlog">Backlog</a> / <span class="mono">{{ story.code }}</span>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="row" style="margin-bottom:6px">
+      <span class="code">{{ story.code }}</span>
+      {{ m.status_badge(story.status) }}
+      {{ m.type_badge(story.type) }}
+      {% if story.epic %}<span class="badge none">{{ story.epic.title }}</span>{% endif %}
+    </div>
+    <h1>{{ story.title }}</h1>
+  </div>
+</div>
+
+<div class="detail">
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><h2>Historia</h2><span class="spacer"></span><span class="small muted">v{{ story.version }}</span></div>
+      <p>
+        <strong>Como</strong> {{ story.role or '—' }},<br>
+        <strong>quiero</strong> {{ story.need or '—' }},<br>
+        <strong>para</strong> {{ story.benefit or '—' }}.
+      </p>
+      <h3 style="margin:16px 0 8px">Criterios de aceptación</h3>
+      {% if story.acceptance_criteria %}
+        <div class="markdown">{{ story.acceptance_criteria|md }}</div>
+      {% else %}<p class="muted">Sin criterios todavía.</p>{% endif %}
+      {% if story.source_ref %}<p class="small muted" style="margin-top:14px">Fuente: {{ story.source_ref }}</p>{% endif %}
+    </section>
+
+    {% set hs = hitl.state(story) %}{% set rv = hs.review %}
+    <section class="card hitl-panel {{ 'lvl-border-' ~ rv.level if rv and rv.level is not none }}" id="revision">
+      <div class="card-head">
+        <h2>Revisión humana</h2>
+        <span class="spacer"></span>
+        {{ h.state_badge(hs) }}
+        {% if hs.level is not none %}{{ h.level_badge(hs.level) }}{% endif %}
+      </div>
+      {% if rv is none %}
+        <p class="muted small">Esta HU todavía no pasa por los agentes. Ellos la analizan (INVEST, ambigüedades, arquitectura, pruebas y estimación) y luego una persona decide.</p>
+      {% elif rv.status in ('queued', 'running') %}
+        <p class="muted small" data-autorefresh="6">Los agentes están revisando la HU. La página se actualiza sola.</p>
+      {% elif rv.status == 'failed' %}
+        <div class="alert error">La revisión falló: {{ rv.error }}</div>
+      {% else %}
+        <div class="row small muted review-meta">
+          {{ m.type_badge(rv.story_type) }}
+          <span>Confianza {{ '%.0f'|format((rv.confidence or 0) * 100) }} %</span>
+          {% if rv.quality is not none %}<span>Calidad INVEST {{ '%.0f'|format(rv.quality) }}</span>{% endif %}
+          <span>revisada en v{{ rv.story_version }}{% if hs.key == 'desactualizada' %} · la HU cambió después{% endif %}</span>
+        </div>
+        {{ h.review_body(rv, story) }}
+
+        {% set ag = rv.agents or {} %}
+        {% if ag.analysis and ag.analysis.summary %}<p class="small"><strong>Analista:</strong> {{ ag.analysis.summary }}</p>{% endif %}
+        {% if ag.architecture %}
+        <details class="agent-detail">
+          <summary>Arquitectura{% if ag.architecture.impacts %} · {{ ag.architecture.impacts|length }} impacto{{ 's' if ag.architecture.impacts|length != 1 }}{% endif %}</summary>
+          <p class="small">{{ ag.architecture.summary }}</p>
+          {% if ag.architecture.impacts %}<ul class="small">{% for i in ag.architecture.impacts %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
+          {% if ag.architecture.recommendations %}<p class="small muted">Recomienda: {{ ag.architecture.recommendations|join(' · ') }}</p>{% endif %}
+        </details>
+        {% endif %}
+        {% if ag.qa %}
+        <details class="agent-detail">
+          <summary>Calidad · {{ (ag.qa.test_cases or [])|length }} caso{{ 's' if (ag.qa.test_cases or [])|length != 1 }} de prueba</summary>
+          <p class="small">{{ ag.qa.summary }}</p>
+          {% for t in ag.qa.test_cases or [] %}
+          <div class="test-case small">
+            <strong>{{ t.title }}</strong> <span class="muted">· {{ t.type }}</span>
+            <div><span class="muted">Dado</span> {{ t.given }} <span class="muted">cuando</span> {{ t.when }} <span class="muted">entonces</span> {{ t.then }}</div>
+          </div>
+          {% endfor %}
+          {% if ag.qa.coverage_gaps %}<p class="small muted">Sin cubrir: {{ ag.qa.coverage_gaps|join(' · ') }}</p>{% endif %}
+        </details>
+        {% endif %}
+        {% if rv.estimation %}{% set e = rv.estimation %}
+        <details class="agent-detail">
+          <summary>Estimación · {{ e.points }} pts ({{ e.range.min }}–{{ e.range.max }}){% if e.spike.required %} + spike {{ e.spike.points }}{% endif %}</summary>
+          <p class="small muted mono">{{ e.method }} · {% for k, v in (e.factors or {}).items() %}{{ k }}={{ v }}{{ ' · ' if not loop.last }}{% endfor %}</p>
+          {% if e.type_justification %}<p class="small">{{ e.type_justification }}</p>{% endif %}
+          {% if e.rationale %}<p class="small muted">{{ e.rationale }}</p>{% endif %}
+          {% if story.function_points is not none %}<p class="small">Tamaño medido (etapa 3): {{ m.fp(story.function_points) }}</p>{% endif %}
+        </details>
+        {% endif %}
+
+        {% if hs.key in ('pendiente', 'falta_info') %}
+          {{ h.decision_form(story, rv, '/p/' ~ project.key ~ '/stories/' ~ story.code) }}
+        {% elif hs.key == 'cambios' %}
+          <p class="small muted">Se pidieron cambios: el agente refina la HU y la vuelve a revisar.</p>
+        {% endif %}
+      {% endif %}
+
+      {% if can_edit and hs.key not in ('analizando', 'descartada') %}
+      <form method="post" action="/p/{{ project.key }}/stories/{{ story.code }}/hitl/review" class="row" style="margin-top:10px">
+        <input type="hidden" name="next" value="/p/{{ project.key }}/stories/{{ story.code }}">
+        <button class="btn btn-sm {{ 'btn-primary' if hs.key in ('sin_revisar', 'desactualizada', 'error') }}" type="submit" {{ 'disabled' if not agent_status.configured }}>
+          {{ 'Revisar con agentes' if rv is none else 'Revisar de nuevo' }}</button>
+        {% if not agent_status.configured %}<span class="small muted">Agentes no configurados: {{ agent_status.reason }}</span>{% endif %}
+      </form>
+      {% endif %}
+
+      {% set log = [] %}{% for r in story.reviews %}{% for d in r.decisions %}{% set _ = log.append(d) %}{% endfor %}{% endfor %}
+      {% if log %}
+      <details class="agent-detail" {{ 'open' if hs.key == 'falta_info' }}>
+        <summary>Decisiones y comentarios ({{ log|length }})</summary>
+        {% for d in log|reverse %}
+        <div class="event">
+          <span class="dot"></span>
+          <div>
+            <div><strong>{{ d.decided_by.name if d.decided_by else '—' }}</strong>
+              <span class="muted">{{ hitl.DECISIONS[d.decision]|lower }}{% if d.applied_proposal %} con la propuesta{% endif %}</span>
+              {% if d.level is not none and d.decision != 'comentario' %}<span class="small muted">· nivel {{ d.level }} · {{ d.role }}</span>{% endif %}</div>
+            {% if d.comment %}<div class="small">{{ d.comment }}</div>{% endif %}
+            <div class="small muted">{{ d.created_at.strftime('%Y-%m-%d %H:%M') if d.created_at }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </details>
+      {% endif %}
+    </section>
+
+    {% if can_edit and story.status in ('borrador', 'en_refinamiento', 'refinada') %}
+    <details class="card">
+      <summary style="cursor:pointer;font-weight:600">✦ Refinar con agente IA</summary>
+      <p class="small muted" style="margin:10px 0">{% if agent_status.configured %}El agente reescribe los criterios en markdown y deja la HU en «Refinada». Un humano la pasa después a «Lista».{% else %}Agente no configurado: {{ agent_status.reason }}{% endif %}</p>
+      <form method="post" action="/p/{{ project.key }}/stories/{{ story.code }}/agents/refine" class="stack">
+        <div class="field"><label for="r-instr">Instrucciones extra (opcional)</label><input id="r-instr" name="instructions"></div>
+        <button class="btn btn-primary" type="submit" {{ 'disabled' if not agent_status.configured }}>Refinar con agente</button>
+      </form>
+    </details>
+    {% endif %}
+    {% if can_edit and story.status != 'descartada' %}
+    <form method="post" action="/p/{{ project.key }}/stories/{{ story.code }}/agents/size" style="margin-top:10px">
+      <button class="btn" type="submit" {{ 'disabled' if not agent_status.configured }}>Medir con agente (puntos de función)</button>
+      <span class="small muted">{% if agent_status.configured %}Los agentes identifican y clasifican las funciones IFPUG; el sistema calcula los puntos. Un humano revisa y aprueba la etapa 3.{% else %}Agente no configurado: {{ agent_status.reason }}{% endif %}</span>
+    </form>
+    {% endif %}
+
+    {% set ca = story.context_analysis %}
+    {% if ca %}
+    <section class="card">
+      <div class="card-head"><h2>Contexto y restricciones</h2><span class="spacer"></span><span class="small muted mono">grafo v{{ ca.graph_version }} · {{ ca.method }}</span></div>
+      {% if ca.summary %}<p class="small">{{ ca.summary }}</p>{% endif %}
+      {% for v in ca.violations %}
+      <div class="alert {{ 'ok' if v.status == 'waived' else 'error' }}" style="margin:10px 0">
+        <strong>{{ 'Excepción registrada' if v.status == 'waived' else 'Restricción violada' }}:</strong> {{ v.name }}
+        <span class="small">({{ v.category }} · {{ v.severity }})</span>
+        <div class="small">{{ v.reason }}</div>
+        <div class="small muted">Regla: {{ v.rule }}</div>
+        {% if v.status == 'waived' %}<div class="small">{{ v.waiver.by }}: {{ v.waiver.justification }}</div>
+        {% elif can_edit %}
+        <form method="post" action="/p/{{ project.key }}/stories/{{ story.code }}/violations/{{ v.constraint_id }}/waive" class="row" style="margin-top:8px">
+          <input name="justification" minlength="10" required placeholder="Justificación de la excepción (mín. 10 caracteres)" style="flex:1">
+          <button class="btn btn-sm" type="submit">Registrar excepción</button>
+        </form>
+        <div class="small muted">O cambia la HU y vuelve a medirla. Mientras esté abierta, la etapa 3 no se puede aprobar.</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div class="table-wrap"><table>
+        <thead><tr><th>Restricción activada</th><th>Categoría</th><th>Severidad</th><th class="num">Puntos NFR</th></tr></thead>
+        <tbody>
+        {% for c in ca.constraints %}
+          <tr><td>{{ c.name }}<div class="small muted">{{ c.reason }}</div></td><td>{{ c.category }}</td><td>{{ c.severity }}</td><td class="num">{{ c.points }}</td></tr>
+        {% else %}<tr><td colspan="4" class="muted small">Ninguna restricción activada.</td></tr>{% endfor %}
+        </tbody>
+        <tfoot><tr><th colspan="3">Tamaño no funcional</th><th class="num">{{ ca.nfr_points }}</th></tr></tfoot>
+      </table></div>
+      {% if ca.impacted_features or ca.existing_entities %}
+      <p class="small muted" style="margin-top:8px">
+        {% if ca.impacted_features %}Toca: {% for f in ca.impacted_features %}{{ f.name }} ({{ f.status }}){{ ', ' if not loop.last }}{% endfor %}.{% endif %}
+        {% if ca.existing_entities %} Reusa lo existente: {% for e in ca.existing_entities %}{{ e.name }}{{ ', ' if not loop.last }}{% endfor %}.{% endif %}
+      </p>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if story.fp_analysis %}
+    <section class="card">
+      <div class="card-head"><h2>Puntos de función</h2><span class="spacer"></span><span class="small muted mono">{{ story.fp_analysis.method }}</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Función</th><th>Tipo</th><th class="num">DET</th><th class="num">RET/FTR</th><th>Complejidad</th><th class="num">FP</th></tr></thead>
+        <tbody>
+        {% for f in story.fp_analysis.functions %}
+          <tr>
+            <td>{{ f.name }}{% if f.rationale %}<div class="small muted">{{ f.rationale }}</div>{% endif %}</td>
+            <td class="mono">{{ f.type }}</td>
+            <td class="num">{{ f.det }}</td>
+            <td class="num">{{ f.ret if f.ret is defined else f.ftr }}</td>
+            <td>{{ {'low': 'Baja', 'average': 'Media', 'high': 'Alta'}[f.complexity] }}</td>
+            <td class="num">{% if f.reused %}<span class="small muted" title="Ya contada por una HU anterior">reusada · 0</span>{% else %}{{ f.fp }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot><tr><th colspan="5">Total (UFP)</th><th class="num">{{ story.fp_analysis.ufp }}</th></tr></tfoot>
+      </table></div>
+      {% if story.fp_analysis.notes and story.fp_analysis.notes.rationale %}<p class="small muted" style="margin-top:10px">{{ story.fp_analysis.notes.rationale }}{% if story.fp_analysis.notes.sized_by %} · {{ story.fp_analysis.notes.sized_by }}{% endif %}</p>{% endif %}
+      <p class="small muted" style="margin-top:6px">Para corregir: <span class="mono">PATCH /api/v1/projects/{{ project.key }}/stories/{{ story.code }}</span> con <span class="mono">fp_components</span>; el sistema recalcula y deja el cambio en el historial.</p>
+    </section>
+    {% endif %}
+
+    {% if can_edit %}
+    <details class="card">
+      <summary style="cursor:pointer;font-weight:600">Editar historia</summary>
+      <form method="post" action="/p/{{ project.key }}/stories/{{ story.code }}/edit" class="form-grid" style="margin-top:14px">
+        <div class="field span-2"><label for="e-title">Título</label><input id="e-title" name="title" value="{{ story.title }}" required minlength="3"></div>
+        <div class="field"><label for="e-epic">Épica</label><input id="e-epic" name="epic" value="{{ story.epic.title if story.epic else '' }}" list="epic-list"><datalist id="epic-list">{% for e in epics %}<option value="{{ e.title }}">{% endfor %}</datalist></div>
+        <div class="field"><label for="e-type">Tipo</label>
+          <select id="e-type" name="type">
+            <option value="">Sin clasificar</option>
+            {% for k, label in type_labels.items() %}<option value="{{ k }}" {{ 'selected' if story.type == k }}>{{ label }}</option>{% endfor %}
+          </select></div>
+        <div class="field"><label for="e-role">Rol</label><input id="e-role" name="role_" value="{{ story.role or '' }}"></div>
+        <div class="field"><label for="e-need">Necesidad</label><input id="e-need" name="need" value="{{ story.need or '' }}"></div>
+        <div class="field span-2"><label for="e-benefit">Beneficio</label><input id="e-benefit" name="benefit" value="{{ story.benefit or '' }}"></div>
+        <div class="field span-2"><label for="e-criteria">Criterios de aceptación (markdown)</label><textarea id="e-criteria" name="criteria" rows="8">{{ story.acceptance_criteria or '' }}</textarea></div>
+        <div class="field span-2"><label for="e-just">Justificación del tipo</label><input id="e-just" name="type_justification" value="{{ story.type_justification or '' }}"></div>
+        <div class="field"><label for="e-rank">Prioridad (ranking)</label><input id="e-rank" name="priority_rank" inputmode="numeric" value="{{ story.priority_rank if story.priority_rank is not none else '' }}"></div>
+        <div class="field"><label for="e-pmethod">Método de priorización</label><input id="e-pmethod" name="priority_method" value="{{ story.priority_method or '' }}"></div>
+        <div class="field span-2"><label for="e-src">Fuente (trazabilidad)</label><input id="e-src" name="source_ref" value="{{ story.source_ref or '' }}"></div>
+        <div class="span-2"><button class="btn btn-primary" type="submit">Guardar cambios</button></div>
+      </form>
+    </details>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head"><h2>Historial</h2></div>
+      {% for e in events %}
+      <div class="event">
+        <span class="dot {{ 'auto' if e.actor_type == 'service' }}"></span>
+        <div>
+          <div><strong>{{ e.actor_name }}</strong>
+            <span class="muted">{{ {'created':'creó la HU','updated':'editó','status_changed':'cambió estado','refined':'refinó','refinement_notes':'notas de refinamiento','assigned':'reasignó','sizing_rationale':'justificó el dimensionamiento','constraint_violations':'detectó restricciones violadas','violation_waived':'exceptuó una restricción','hitl_reviewed':'revisión de agentes','hitl_aprobar':'aprobó (HITL)','hitl_pedir_cambios':'pidió cambios (HITL)','hitl_descartar':'descartó (HITL)','hitl_falta_info':'pidió información (HITL)','hitl_comentario':'comentó (HITL)'}[e.event_type] or e.event_type }}</span>
+            {% if e.from_status and e.to_status %}
+              <span class="small">{{ status_labels[e.from_status] }} → {{ status_labels[e.to_status] }}</span>
+            {% endif %}
+          </div>
+          {% if e.diff %}<div class="small muted mono" style="word-break:break-word">{{ e.diff|tojson }}</div>{% endif %}
+          <div class="small muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at }}</div>
+        </div>
+      </div>
+      {% else %}<p class="muted">Sin eventos.</p>{% endfor %}
+    </section>
+  </div>
+
+  <aside class="side">
+    <section class="card">
+      <h2 style="margin-bottom:12px">Flujo</h2>
+      {% if allowed %}
+      <div class="transitions">
+        {% for st in allowed %}
+        <form method="post" action="/p/{{ project.key }}/stories/{{ story.code }}/status">
+          <input type="hidden" name="status" value="{{ st }}">
+          <button class="btn btn-sm st-{{ st }}" type="submit" style="border:0">→ {{ status_labels[st] }}</button>
+        </form>
+        {% endfor %}
+      </div>
+      {% else %}
+        <p class="muted small">No tienes transiciones disponibles desde «{{ status_labels[story.status] }}».</p>
+      {% endif %}
+      {% if refinement %}
+      <div class="alert ok" style="margin-top:14px">
+        <strong>Refinamiento:</strong> {{ refinement.status }}{% if refinement.claimed_by %} · {{ refinement.claimed_by }}{% endif %}
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2 style="margin-bottom:12px">Detalles</h2>
+      <dl style="display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:0">
+        <dt class="muted">No funcional</dt><dd style="margin:0">{{ '%g NFR'|format(story.nfr_points) if story.nfr_points is not none else '—' }}</dd>
+        <dt class="muted">Tamaño</dt><dd style="margin:0">{{ m.fp(story.function_points) }}{% if story.fp_analysis %} <span class="small muted">{{ story.fp_analysis.method }}</span>{% endif %}</dd>
+        {% if story.fp_analysis %}
+        <dt class="muted">Por tipo</dt><dd style="margin:0" class="small mono">{% for k, v in story.fp_analysis.by_type.items() if v %}{{ k }}={{ v }}{{ ' · ' if not loop.last }}{% else %}—{% endfor %}</dd>
+        {% endif %}
+        <dt class="muted">Prioridad</dt><dd style="margin:0">{{ '#' ~ story.priority_rank if story.priority_rank is not none else '—' }}</dd>
+        <dt class="muted">Asignado</dt><dd style="margin:0">{{ story.assignee.name if story.assignee else 'Sin asignar' }}</dd>
+        <dt class="muted">Actualizada</dt><dd style="margin:0" class="small">{{ story.updated_at.strftime('%Y-%m-%d %H:%M') if story.updated_at }}</dd>
+      </dl>
+      {% if story.type_justification %}<p class="small muted" style="margin-top:12px">{{ story.type_justification }}</p>{% endif %}
+      {% if can_edit %}
+      <form method="post" action="/p/{{ project.key }}/stories/{{ story.code }}/assign" style="margin-top:14px">
+        <label for="a-user">Asignar a</label>
+        <div class="row">
+          <select id="a-user" name="user_id" style="flex:1">
+            <option value="">Sin asignar</option>
+            {% for mb in members %}<option value="{{ mb.user_id }}" {{ 'selected' if story.assignee_id == mb.user_id }}>{{ mb.user.name }}</option>{% endfor %}
+          </select>
+          <button class="btn btn-sm" type="submit">Guardar</button>
+        </div>
+      </form>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

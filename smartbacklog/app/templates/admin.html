@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Administración{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Administración</h1>
+    <p class="muted">Usuarios del sistema y claves para los agentes ADK.</p>
+  </div>
+</div>
+
+{% if new_key %}
+<div class="alert ok" style="margin-bottom:16px">
+  <strong>API key «{{ new_key.name }}» creada.</strong> Cópiala ahora: no se volverá a mostrar.<br>
+  <code class="mono">{{ new_key.key }}</code>
+</div>
+{% endif %}
+
+<div class="grid grid-2" style="align-items:start">
+  <section class="card">
+    <div class="card-head"><h2>Usuarios</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Acceso</th></tr></thead>
+      <tbody>
+      {% for u in users %}
+        <tr>
+          <td>{{ u.name }}</td>
+          <td class="small">{{ u.email }}</td>
+          <td>{% if u.is_admin %}<span class="badge type-HU_IA">Admin</span>{% else %}<span class="badge none">Usuario</span>{% endif %}</td>
+          <td>{% if u.password_hash %}<span class="badge ok">Activo</span>{% else %}<span class="badge pending">Sin contraseña</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+
+    <details class="new-story" style="margin-top:16px">
+      <summary>+ Nuevo usuario</summary>
+      <form method="post" action="/admin/users" class="stack" style="margin-top:12px">
+        <div class="field"><label for="u-name">Nombre</label><input id="u-name" name="name" required minlength="2"></div>
+        <div class="field"><label for="u-email">Correo</label><input id="u-email" name="email" type="email" required></div>
+        <div class="field"><label for="u-pass">Contraseña (mín. 8)</label><input id="u-pass" name="password" type="password" minlength="8"></div>
+        <label class="row small" style="font-weight:500;color:var(--text)"><input type="checkbox" name="is_admin" value="1" style="width:auto"> Administrador</label>
+        <button class="btn btn-primary" type="submit">Crear usuario</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>API keys (agentes ADK)</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Nombre</th><th>Estado</th><th>Creada</th></tr></thead>
+      <tbody>
+      {% for k in keys %}
+        <tr>
+          <td>{{ k.name }}</td>
+          <td>{% if k.is_active %}<span class="badge ok">Activa</span>{% else %}<span class="badge none">Revocada</span>{% endif %}</td>
+          <td class="small muted">{{ k.created_at.strftime('%Y-%m-%d') if k.created_at else '' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">Sin claves todavía.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+
+    <form method="post" action="/admin/api-keys" class="stack" style="margin-top:16px">
+      <div class="field"><label for="k-name">Nombre del agente</label><input id="k-name" name="name" required minlength="3" placeholder="adk-clasificacion"></div>
+      <button class="btn btn-primary" type="submit">Generar API key</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ project.key }} · Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ project.name }}</h1>
+    <p class="muted">{{ project.description or 'Smart Product Backlog del proyecto' }}</p>
+  </div>
+  <span class="spacer"></span>
+  <a class="btn" href="/p/{{ project.key }}/board">Tablero</a>
+  <a class="btn btn-primary" href="/p/{{ project.key }}/backlog">Ver backlog</a>
+</div>
+
+<div class="grid grid-4" style="margin-bottom:16px">
+  <div class="card kpi"><div class="label">Historias</div><div class="value">{{ summary.total_stories }}</div></div>
+  <div class="card kpi"><div class="label">Puntos de función</div><div class="value">{{ '%g'|format(summary.total_function_points) }}</div></div>
+  <div class="card kpi"><div class="label">Completado</div><div class="value">{{ summary.completion_pct }}%</div>
+    <div class="progress" style="margin-top:8px"><span style="width: {{ summary.completion_pct }}%"></span></div></div>
+  <div class="card kpi"><div class="label">Etapas HITL aprobadas</div><div class="value">{{ approved }} / 5</div></div>
+</div>
+
+<section class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2>Pipeline y validación HITL</h2><span class="spacer"></span>
+    <span class="small muted">Cada etapa exige aprobación humana antes de avanzar</span></div>
+  <div class="stepper">
+    {% for s in pipeline %}
+      {% set prev_ok = (loop.first or pipeline[loop.index0 - 1].status == 'approved') %}
+      {% set current = (s.status != 'approved' and prev_ok) %}
+      <div class="step {{ 'approved' if s.status == 'approved' }} {{ 'current' if current }}">
+        <div class="idx">{{ s.stage_number }}</div>
+        <div class="name">{{ s.name }}</div>
+        {% if s.status == 'approved' %}
+          <span class="badge ok">Aprobada</span>
+          <div class="small muted" style="margin-top:6px">{{ s.approved_by }}</div>
+        {% elif current %}
+          <span class="badge pending">Pendiente de validación</span>
+          {% if s.stage_number == 1 %}{% set b1 = hitl.stage1_blockers(project) %}
+            <div class="small muted" style="margin:6px 0">{% if b1 %}{{ b1|length }} HU sin aprobar en <a href="/p/{{ project.key }}/revision">Revisión humana</a>{% else %}Todas las HU activas están aprobadas{% endif %}</div>
+          {% endif %}
+          {% if can_write %}
+          <form method="post" action="/p/{{ project.key }}/pipeline/{{ s.stage_number }}/approve">
+            <input name="summary" placeholder="Resumen de cambios (opcional)" style="margin-bottom:8px">
+            <button class="btn btn-primary btn-sm" type="submit">Aprobar etapa</button>
+          </form>
+          {% endif %}
+        {% else %}
+          <span class="badge none">Bloqueada</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="grid grid-2">
+  <section class="card">
+    <div class="card-head"><h2>HU por estado</h2></div>
+    <div class="chart-box"><canvas id="chart-status" aria-label="HU por estado"></canvas></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>HU por épica</h2></div>
+    {% if summary.by_epic %}
+    <div class="chart-box"><canvas id="chart-epic" aria-label="HU por épica"></canvas></div>
+    {% else %}<div class="empty">Sin épicas todavía</div>{% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+window.addEventListener("load", () => {
+  if (!window.Chart) return;
+  const css = getComputedStyle(document.documentElement);
+  const palette = ["#748ffc", "#b197fc", "#66d9e8", "#51cf66", "#ffd43b", "#ff8787", "#adb5bd", "#e599f7"];
+  const text = css.getPropertyValue("--muted").trim() || "#5d6b86";
+  Chart.defaults.color = text;
+  Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+  const status = {{ status_chart|tojson }};
+  new Chart(document.getElementById("chart-status"), {
+    type: "doughnut",
+    data: { labels: status.map(r => r[0]), datasets: [{ data: status.map(r => r[1]), backgroundColor: palette, borderWidth: 0 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { position: "right" } }, cutout: "62%" },
+  });
+  const epics = {{ epic_chart|tojson }};
+  const el = document.getElementById("chart-epic");
+  if (el) new Chart(el, {
+    type: "bar",
+    data: { labels: epics.map(r => r[0]), datasets: [{ label: "HU", data: epics.map(r => r[1]), backgroundColor: "#748ffc", borderRadius: 6 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+  });
+});
+</script>
+{% endblock %}

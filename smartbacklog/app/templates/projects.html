@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Proyectos{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Proyectos</h1>
+    <p class="muted">Backlogs de producto generados y gestionados por el equipo.</p>
+  </div>
+  <span class="spacer"></span>
+</div>
+
+<details class="new-story card" style="margin-bottom:20px">
+  <summary>+ Nuevo proyecto</summary>
+  <form method="post" action="/projects" class="form-grid" style="margin-top:14px">
+    <div class="field">
+      <label for="key">Clave (A-Z, 2-10)</label>
+      <input id="key" name="key" required pattern="[A-Za-z][A-Za-z0-9]{1,9}" placeholder="SPB">
+    </div>
+    <div class="field">
+      <label for="name">Nombre</label>
+      <input id="name" name="name" required minlength="2" placeholder="Smart Product Backlog">
+    </div>
+    <div class="field span-2">
+      <label for="description">Descripción</label>
+      <textarea id="description" name="description" rows="2"></textarea>
+    </div>
+    <div class="span-2"><button class="btn btn-primary" type="submit">Crear proyecto</button></div>
+  </form>
+</details>
+
+{% if cards %}
+<div class="grid grid-3">
+  {% for c in cards %}
+  <a class="card project-card" href="/p/{{ c.project.key }}">
+    <div class="row">
+      <span class="project-key">{{ c.project.key[:3] }}</span>
+      <span class="spacer"></span>
+      <span class="badge none">{{ c.total }} HU</span>
+    </div>
+    <div>
+      <h2>{{ c.project.name }}</h2>
+      <p class="muted small">{{ c.project.description or 'Sin descripción' }}</p>
+    </div>
+    <div>
+      <div class="row small muted" style="justify-content:space-between"><span>Avance</span><span>{{ c.pct }}%</span></div>
+      <div class="progress" style="margin-top:6px"><span style="width: {{ c.pct }}%"></span></div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">Aún no tienes proyectos. Crea uno o pide al administrador que te agregue a uno.</div>
+{% endif %}
+{% endblock %}

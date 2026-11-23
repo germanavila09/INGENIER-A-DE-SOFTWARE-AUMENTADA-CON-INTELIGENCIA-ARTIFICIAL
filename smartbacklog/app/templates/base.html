@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}Smart Product Backlog{% endblock %} · SPB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <script src="{{ url_for('static', path='app.js') }}" defer></script>
+</head>
+<body>
+{% macro flash_box() %}
+  {% if flash %}
+    <div class="alert {{ flash.kind }} toast" role="status">{{ flash.message }}</div>
+  {% endif %}
+{% endmacro %}
+
+{% if user %}
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">SPB</span>
+      <span>Smart Backlog</span>
+    </div>
+    <a class="nav-link {{ 'active' if request.url.path == '/projects' }}" href="/projects">Proyectos</a>
+
+    {% if project %}
+      <div class="nav-section">{{ project.key }} · {{ project.name }}</div>
+      <a class="nav-link {{ 'active' if request.url.path == '/p/' ~ project.key }}" href="/p/{{ project.key }}">Dashboard</a>
+      {% set hp = hitl_pending(project) %}
+      <a class="nav-link {{ 'active' if request.url.path.endswith('/revision') }}" href="/p/{{ project.key }}/revision">Revisión humana{% if hp %}<span class="nav-count" title="HU que esperan una decisión">{{ hp }}</span>{% endif %}</a>
+      <a class="nav-link {{ 'active' if request.url.path.endswith('/estimacion') }}" href="/p/{{ project.key }}/estimacion">Estimación</a>
+      <a class="nav-link {{ 'active' if request.url.path.startswith('/p/' ~ project.key ~ '/backlog') or '/stories/' in request.url.path }}" href="/p/{{ project.key }}/backlog">Backlog</a>
+      <a class="nav-link {{ 'active' if request.url.path.endswith('/board') }}" href="/p/{{ project.key }}/board">Tablero</a>
+      <a class="nav-link {{ 'active' if request.url.path.endswith('/reports') }}" href="/p/{{ project.key }}/reports">Reportes</a>
+      <a class="nav-link {{ 'active' if request.url.path.endswith('/members') }}" href="/p/{{ project.key }}/members">Miembros</a>
+      <a class="nav-link {{ 'active' if request.url.path.endswith('/agents') }}" href="/p/{{ project.key }}/agents">Agentes IA</a>
+    {% endif %}
+
+    {% if user.is_admin %}
+      <div class="nav-section">Administración</div>
+      <a class="nav-link {{ 'active' if request.url.path == '/admin' }}" href="/admin">Usuarios y API keys</a>
+    {% endif %}
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <nav class="crumbs">
+        <a href="/projects">Proyectos</a>
+        {% if project %} / <a href="/p/{{ project.key }}">{{ project.key }}</a>{% endif %}
+        {% block crumb %}{% endblock %}
+      </nav>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" type="button" data-theme-toggle aria-label="Cambiar tema">◐ Tema</button>
+      <span class="avatar" title="{{ user.email }}">{{ user.name[:1]|upper }}</span>
+      <span class="small"><strong>{{ user.name }}</strong></span>
+      <form method="post" action="/logout">
+        <button class="btn btn-ghost btn-sm" type="submit">Salir</button>
+      </form>
+    </header>
+
+    <main class="content">
+      {{ flash_box() }}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+  {% block anon %}{% endblock %}
+{% endif %}
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

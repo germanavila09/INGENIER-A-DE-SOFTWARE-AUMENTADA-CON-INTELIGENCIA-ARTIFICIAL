@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% import "_hitl.html" as h with context %}
+{% block title %}Revisión humana · {{ project.key }}{% endblock %}
+{% block crumb %} / Revisión humana{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Revisión humana</h1>
+    <p class="muted">Cada HU pasa por cuatro agentes (analista, arquitectura, QA y estimación) y una persona decide.
+      El nivel de riesgo define quién puede aprobar; nada se aprueba solo.</p>
+  </div>
+  <span class="spacer"></span>
+  {% if can_write %}
+  <form method="post" action="/p/{{ project.key }}/hitl/review-pending">
+    <button class="btn btn-primary" type="submit" {{ 'disabled' if not box.agentes or not agent_status.configured }}
+      title="{{ agent_status.reason or '' }}">
+      Revisar con agentes{% if box.agentes %} · {{ box.agentes|length }} HU{% endif %}
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+{% if can_write and not agent_status.configured %}
+  <div class="alert error">Agentes no configurados: {{ agent_status.reason }}</div>
+{% endif %}
+
+<div class="grid grid-4 hitl-kpis">
+  {% set lvl2 = box.decidir|selectattr('state.level', 'equalto', 2)|list %}
+  <div class="card kpi"><div class="label">Esperan decisión</div><div class="value">{{ box.decidir|length }}</div>
+    <div class="small muted">{% if lvl2 %}{{ lvl2|length }} de nivel 2 (product owner){% else %}ninguna crítica{% endif %}</div></div>
+  <div class="card kpi"><div class="label">Para los agentes</div><div class="value">{{ box.agentes|length }}</div>
+    <div class="small muted">nuevas, cambiadas o con fallo</div></div>
+  <div class="card kpi"><div class="label">Aprobadas</div><div class="value">{{ box.aprobadas|length }}</div>
+    <div class="small muted">de {{ box.total - box.descartadas|length }} activas</div></div>
+  <div class="card kpi"><div class="label">Etapa 1 · Generación</div>
+    {% if stage1.status == 'approved' %}<div class="value ok-text">Aprobada</div><div class="small muted">por {{ stage1.approved_by }}</div>
+    {% elif blockers %}<div class="value">Bloqueada</div><div class="small muted">{{ blockers|length }} HU sin aprobar aquí</div>
+    {% else %}<div class="value ok-text">Lista</div><div class="small muted"><a href="/p/{{ project.key }}">aprobar en el dashboard</a></div>{% endif %}
+  </div>
+</div>
+
+<p class="small muted level-legend">
+  {{ h.level_badge(2) }} <span>cambios críticos, preguntas bloqueantes o baja confianza</span>
+  {{ h.level_badge(1) }} <span>observaciones que conviene mirar</span>
+  {{ h.level_badge(0) }} <span>los agentes no encontraron problemas</span>
+</p>
+
+<section class="hitl-section">
+  <h2>Esperan una decisión</h2>
+  {% for row in box.decidir %}
+    {% set s = row.story %}{% set st = row.state %}{% set rv = st.review %}
+    <article class="card review-card lvl-border-{{ rv.level }}">
+      <div class="row">
+        <span class="code">{{ s.code }}</span>
+        <a class="story-title" href="/p/{{ project.key }}/stories/{{ s.code }}">{{ s.title }}</a>
+        <span class="spacer"></span>
+        {% if st.key == 'falta_info' %}{{ h.state_badge(st) }}{% endif %}
+        {{ h.level_badge(rv.level) }}
+      </div>
+      <div class="row small muted review-meta">
+        {{ m.type_badge(rv.story_type) }}
+        <span>Confianza {{ '%.0f'|format((rv.confidence or 0) * 100) }} %</span>
+        {% if rv.quality is not none %}<span>Calidad INVEST {{ '%.0f'|format(rv.quality) }}</span>{% endif %}
+        {% if rv.estimation %}<span>{{ rv.estimation.points }} pts ({{ rv.estimation.range.min }}–{{ rv.estimation.range.max }}){% if rv.estimation.spike.required %} + spike {{ rv.estimation.spike.points }}{% endif %}</span>{% endif %}
+        {% if st.decision and st.decision.comment %}<span>«{{ st.decision.comment }}» — {{ st.decision.decided_by.name if st.decision.decided_by }}</span>{% endif %}
+      </div>
+      {{ h.review_body(rv, s, compact=True) }}
+      {{ h.decision_form(s, rv, '/p/' ~ project.key ~ '/revision') }}
+    </article>
+  {% else %}
+    <div class="empty">{% if box.agentes %}Nada espera decisión. Hay {{ box.agentes|length }} HU para revisar con los agentes.{% else %}No hay HU esperando una decisión.{% endif %}</div>
+  {% endfor %}
+</section>
+
+{% if box.en_curso %}
+<section class="hitl-section" {% if running %}data-autorefresh="6"{% endif %}>
+  <h2>En curso</h2>
+  <div class="card table-wrap"><table>
+    <tbody>
+    {% for row in box.en_curso %}
+      <tr><td class="code">{{ row.story.code }}</td>
+        <td><a href="/p/{{ project.key }}/stories/{{ row.story.code }}">{{ row.story.title }}</a></td>
+        <td>{{ h.state_badge(row.state) }}</td>
+        <td class="small muted">{% if row.state.key == 'cambios' %}El agente refina la HU; luego vuelve a revisión.{% else %}Los agentes la están revisando.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% if running %}<p class="small muted">La página se actualiza sola mientras los agentes trabajan.</p>{% endif %}
+</section>
+{% endif %}
+
+{% if box.agentes %}
+<section class="hitl-section">
+  <h2>Para revisar con los agentes</h2>
+  <div class="card table-wrap"><table>
+    <tbody>
+    {% for row in box.agentes %}
+      <tr><td class="code">{{ row.story.code }}</td>
+        <td><a href="/p/{{ project.key }}/stories/{{ row.story.code }}">{{ row.story.title }}</a></td>
+        <td>{{ h.state_badge(row.state) }}</td>
+        <td class="small muted">{% if row.state.key == 'error' %}{{ row.state.review.error }}{% endif %}</td>
+        <td class="num">{% if can_write %}
+          <form method="post" action="/p/{{ project.key }}/stories/{{ row.story.code }}/hitl/review">
+            <input type="hidden" name="next" value="/p/{{ project.key }}/revision">
+            <button class="btn btn-sm" type="submit" {{ 'disabled' if not agent_status.configured }}>Revisar</button>
+          </form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+{% if box.aprobadas or box.descartadas %}
+<section class="hitl-section">
+  <h2>Decididas</h2>
+  <div class="card table-wrap"><table>
+    <thead><tr><th>HU</th><th>Título</th><th>Decisión</th><th>Nivel</th><th>Quién</th><th>Comentario</th></tr></thead>
+    <tbody>
+    {% for row in box.aprobadas + box.descartadas %}
+      {% set d = row.state.decision %}
+      <tr><td class="code">{{ row.story.code }}</td>
+        <td><a href="/p/{{ project.key }}/stories/{{ row.story.code }}">{{ row.story.title }}</a></td>
+        <td>{{ h.state_badge(row.state) }}{% if d and d.applied_proposal %} <span class="small muted">con propuesta</span>{% endif %}</td>
+        <td>{% if d and d.level is not none %}{{ d.level }}{% endif %}</td>
+        <td class="small">{{ d.decided_by.name if d and d.decided_by else '—' }}</td>
+        <td class="small muted">{{ d.comment if d and d.comment else '' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}
