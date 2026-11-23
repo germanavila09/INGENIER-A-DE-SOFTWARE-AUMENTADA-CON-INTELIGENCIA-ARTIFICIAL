@@ -76,6 +76,8 @@ a los puntos de función. En Linux o macOS: crea `smartbacklog/.env` con la secc
 `docker compose exec app python scripts/seed.py` (usuarios de prueba).
 
 Guía para probadores, usuarios de prueba y demo con `docs_ejemplo`: [smartbacklog/windows/LEEME.md](smartbacklog/windows/LEEME.md).
+Cambios implementados y qué probar: [smartbacklog/docs/CAMBIOS_Y_PRUEBAS.md](smartbacklog/docs/CAMBIOS_Y_PRUEBAS.md).
+Método de estimación: [docs/metodo_estimacion.md](docs/metodo_estimacion.md) y página interactiva [docs/estimacion_hu.html](docs/estimacion_hu.html).
 Detalle técnico: [smartbacklog/README.md](smartbacklog/README.md).
 
 ## Versión anterior: motor ADK con bucket y Vertex AI

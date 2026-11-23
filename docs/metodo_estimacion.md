@@ -1,8 +1,10 @@
 # Método de estimación de historias (HU-IA y HU-Tradicional)
 
-> **Origen.** El método se adoptó del proyecto [SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA)
-> (`docs/metodo-estimacion-hu-ia.md` y `app/services/estimation.py`). Aquí se resume tal como quedó
-> integrado en el orquestador sobre GCP. Las referencias son las que cita ese documento.
+> **Origen.** El método viene del proyecto [SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA)
+> (`docs/metodo-estimacion-hu-ia.md`), se integró primero en el orquestador sobre GCP y hoy funciona en
+> [`smartbacklog/`](../smartbacklog/) (`app/services/estimation.py`), dentro de la revisión humana de cada HU.
+> Las secciones 1 y 3 a 6 aplican igual a las dos versiones; la 2 y la 7 explican cómo funciona en cada una.
+> Explicación interactiva con calculadora: ver el enlace en [smartbacklog/docs/CAMBIOS_Y_PRUEBAS.md](../smartbacklog/docs/CAMBIOS_Y_PRUEBAS.md).
 
 ## 1. Por qué un método por factores
 
@@ -17,6 +19,20 @@ Por eso el método separa factores, calcula los puntos con una fórmula fija y e
 maneras: un **rango** y, cuando hace falta, un **spike** (investigación con tiempo acotado).
 
 ## 2. Quién puntúa y quién calcula
+
+**En SmartBacklogIA (versión actual):**
+
+- El **agente de estimación** corre en la revisión multiagente de cada HU, en paralelo con arquitectura y QA,
+  después del analista. Decide el tipo (`HU_IA` o `HU_TRADICIONAL`) con una justificación y puntúa los factores
+  de 1 a 5.
+- El **código** (`smartbacklog/app/services/estimation.py`) calcula puntos, rango y spike.
+- Una **persona** aprueba la estimación en **Revisión humana** junto con el resto de la revisión. Si no está de
+  acuerdo, usa «Pedir cambios» con su comentario (el agente refina la HU y la vuelve a revisar) o corrige el tipo
+  al editar la HU. Al aprobar, una HU sin tipo toma el que propuso el agente: eso alimenta la etapa 2.
+- La vista **Estimación** muestra, por HU, tipo, factores, puntaje bruto, puntos, rango y spike junto a los puntos
+  de función IFPUG y el tamaño no funcional, con los totales del backlog.
+
+**En la versión anterior (orquestador sobre el bucket):**
 
 - **`estimation_agent`** (Gemini, en paralelo con arquitectura y QA) decide el tipo (`HU_IA` o
   `HU_TRADICIONAL`) con una justificación y puntúa cada factor con un entero de 1 a 5.
@@ -76,6 +92,12 @@ revisión de nivel 1:
   silencio; una persona los completa.
 
 ## 7. Dónde queda
+
+**En SmartBacklogIA:** en la tabla `story_reviews` (columna `estimation`, con `method`, `factors`, `raw_score`,
+`points`, `range`, `spike` y la justificación), visible en el detalle de la HU, en la bandeja de **Revisión
+humana** y en la vista **Estimación**. Cada revisión y decisión queda en el historial de la HU.
+
+**En la versión anterior:**
 
 - `generated/user_stories/<ID>/estimation.json`: salida del agente, estimación calculada y error, si lo hubo.
 - `proposed.json` y `approved.json`: la estimación vigente (en la aprobada, la de la persona si la ajustó).

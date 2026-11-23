@@ -53,6 +53,10 @@ Son claves de prueba publicadas: cámbialas antes de abrir la app a otras person
 7. **Agentes IA → Dimensionar backlog** (puntos de función) y **Estimación**: puntos de historia por factores
    junto a los puntos de función; fija la prioridad y aprueba las etapas 3, 4 y 5.
 
+## Qué cambió y qué probar
+
+Lista de cambios, casos de prueba y lo que hay que tener en cuenta: [docs/CAMBIOS_Y_PRUEBAS.md](../docs/CAMBIOS_Y_PRUEBAS.md).
+
 ## Si algo falla
 
 - `docker compose -p spb logs --tail 80 app` (en la carpeta `smartbacklog`).
