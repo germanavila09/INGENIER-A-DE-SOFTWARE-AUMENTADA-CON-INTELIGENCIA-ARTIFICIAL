@@ -14,6 +14,9 @@ propio nivel. Funciones puras arriba; las que tocan la base, abajo.
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 from sqlalchemy.orm import Session
 
 from app.agents.ports import ReviewInput, ReviewOutput
@@ -215,8 +218,19 @@ def latest_review(story: UserStory) -> StoryReview | None:
     return story.reviews[-1] if story.reviews else None
 
 
+CONTENT_FIELDS = ("title", "role", "need", "benefit", "acceptance_criteria")
+
+
+def content_hash(story: UserStory) -> str:
+    """Huella de lo que revisan los agentes. Estado, prioridad, asignación y tamaño no la cambian."""
+    data = {f: (getattr(story, f) or "").strip() for f in CONTENT_FIELDS}
+    return hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
 def is_current(review: StoryReview, story: UserStory) -> bool:
-    return story.version in (review.story_version, review.applied_version)
+    if review.content_hash:
+        return content_hash(story) in (review.content_hash, review.applied_hash)
+    return story.version in (review.story_version, review.applied_version)  # revisiones sin huella
 
 
 def last_decision(review: StoryReview | None) -> HitlDecision | None:
@@ -371,6 +385,7 @@ def decide(
         story.version += 1
     if decision == "aprobar":
         review.applied_version = story.version  # la versión aprobada sigue «vigente» para esta revisión
+        review.applied_hash = content_hash(story)
 
     record = HitlDecision(review=review, story_id=story.id, decision=decision, comment=comment,
                           applied_proposal=applied, level=review.level, role=role, decided_by_id=user.id)

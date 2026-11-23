@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% import "_hitl.html" as h with context %}
+{% block title %}Estimación · {{ project.key }}{% endblock %}
+{% block crumb %} / Estimación y priorización{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Estimación y priorización</h1>
+    <p class="muted">Dos medidas que se complementan: el <strong>esfuerzo</strong> en puntos de historia (factores que
+      puntúa el agente de estimación y una fórmula fija que calcula el sistema) y el <strong>tamaño</strong> en puntos de
+      función IFPUG más el tamaño no funcional de las restricciones.</p>
+  </div>
+</div>
+
+<div class="grid grid-4 hitl-kpis">
+  <div class="card kpi"><div class="label">Puntos de historia</div><div class="value">{{ totals.points }}</div>
+    <div class="small muted">{{ totals.estimated }} de {{ totals.count }} HU estimadas{% if totals.spikes %} · + {{ totals.spikes }} de spikes{% endif %}</div></div>
+  <div class="card kpi"><div class="label">Puntos de función</div><div class="value">{{ totals.fp|round(1) if totals.fp else 0 }}</div>
+    <div class="small muted">IFPUG sin ajustar (UFP)</div></div>
+  <div class="card kpi"><div class="label">No funcional</div><div class="value">{{ totals.nfr|round(1) if totals.nfr else 0 }}</div>
+    <div class="small muted">puntos NFR por restricciones del grafo</div></div>
+  <div class="card kpi"><div class="label">Clasificación</div><div class="value">{{ totals.by_type.HU_IA }} · {{ totals.by_type.HU_TRADICIONAL }}</div>
+    <div class="small muted">HU-IA · HU-Tradicional</div></div>
+</div>
+
+<details class="card method-card" {{ 'open' if not totals.estimated }}>
+  <summary>Cómo se calculan los puntos de historia</summary>
+  <div class="method-grid">
+    {% for type, method in methods.items() %}
+    <div>
+      <h3>{{ 'HU-Tradicional' if type == 'HU_TRADICIONAL' else 'HU-IA' }} · <span class="mono small">{{ method }}</span></h3>
+      <table class="weights">
+        <tbody>
+        {% for f, w in weights[method].items() %}
+          <tr><td><strong>{{ f }}</strong><div class="small muted">{{ factor_help[f] }}</div></td><td class="num mono">× {{ '%.2f'|format(w) }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+  <ol class="method-steps small">
+    <li>El agente de estimación clasifica la HU (HU-IA o HU-Tradicional) y puntúa cada factor de 1 a 5, con su justificación.</li>
+    <li>El sistema, no el modelo, calcula el <strong>puntaje bruto</strong> = Σ peso × factor (entre 1 y 5).</li>
+    <li>Lo lleva a la escala de Fibonacci {{ fibonacci|join(' · ') }}: índice = redondeo((bruto − 1) × 5 / 4). Bruto 1 → 1 punto; bruto 5 → 13 puntos.</li>
+    <li>HU-IA: si el riesgo es 4 o más, sube un escalón. Si datos o riesgo son 4 o más, pide un <strong>spike</strong> de {{ spike_points }} puntos aparte.</li>
+    <li>El rango son los valores vecinos de Fibonacci. Una persona aprueba la estimación en la revisión humana.</li>
+  </ol>
+</details>
+
+<form method="post" action="/p/{{ project.key }}/estimacion/prioridad">
+<div class="card table-wrap">
+  <table class="estimation-table">
+    <thead><tr>
+      <th class="num" title="Etapa 4: orden del backlog">Prioridad</th><th>HU</th><th>Tipo</th><th>Factores (1–5)</th>
+      <th class="num">Bruto</th><th class="num">Puntos</th><th class="num">Rango</th><th class="num">Spike</th>
+      <th class="num">FP</th><th class="num">NFR</th><th>Revisión</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}{% set s = r.story %}{% set e = r.est %}
+      <tr>
+        <td class="num">{% if can_write %}<label class="sr-only" for="rk-{{ s.code }}">Prioridad de {{ s.code }}</label><input class="rank" id="rk-{{ s.code }}" name="rank_{{ s.code }}" inputmode="numeric" value="{{ s.priority_rank if s.priority_rank is not none else '' }}">{% else %}{{ '#' ~ s.priority_rank if s.priority_rank is not none else '—' }}{% endif %}</td>
+        <td><span class="code">{{ s.code }}</span> <a href="/p/{{ project.key }}/stories/{{ s.code }}#revision">{{ s.title }}</a></td>
+        <td>{{ m.type_badge(e.story_type if e else s.type) }}</td>
+        <td>{% if e %}<span class="factors">{% for f, v in e.factors.items() %}<span class="factor f{{ v }}" title="{{ f }}: {{ factor_help[f] }}">{{ f[:4] }} <b>{{ v }}</b></span>{% endfor %}</span>{% else %}<span class="small muted">sin estimar</span>{% endif %}</td>
+        <td class="num mono">{{ e.raw_score if e else '' }}</td>
+        <td class="num"><strong>{{ e.points if e else '—' }}</strong></td>
+        <td class="num small">{% if e %}{{ e.range.min }}–{{ e.range.max }}{% endif %}</td>
+        <td class="num small">{% if e and e.spike.required %}+{{ e.spike.points }}{% endif %}</td>
+        <td class="num">{{ m.fp(s.function_points) }}</td>
+        <td class="num">{{ s.nfr_points if s.nfr_points is not none else '—' }}</td>
+        <td>{{ h.state_badge(r.state) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="11" class="empty">No hay HU activas.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot><tr><th colspan="5">Total</th><th class="num">{{ totals.points }}</th><th></th><th class="num">{{ '+' ~ totals.spikes if totals.spikes }}</th>
+      <th class="num">{{ totals.fp|round(1) if totals.fp else 0 }}</th><th class="num">{{ totals.nfr|round(1) if totals.nfr else 0 }}</th><th></th></tr></tfoot>
+    {% endif %}
+  </table>
+</div>
+{% if can_write and rows %}
+<div class="row" style="margin-top:12px">
+  <label for="pm" class="small muted">Criterio de priorización</label>
+  <input id="pm" name="priority_method" style="flex:1;max-width:360px" placeholder="Valor de negocio y dependencias (product owner)"
+    value="{{ (rows|map(attribute='story')|map(attribute='priority_method')|select|first) or '' }}">
+  <button class="btn btn-primary" type="submit">Guardar prioridad</button>
+  <span class="small muted">Cambiar la prioridad no invalida la revisión humana. Luego aprueba la etapa 4 en el
+    <a href="/p/{{ project.key }}">dashboard</a>.</span>
+</div>
+{% endif %}
+</form>
+
+<p class="small muted" style="margin-top:16px">Etapa 3 · {{ stages[3].name }}: {{ 'aprobada por ' ~ stages[3].approved_by if stages[3].status == 'approved' else 'pendiente' }} ·
+  Etapa 4 · {{ stages[4].name }}: {{ 'aprobada por ' ~ stages[4].approved_by if stages[4].status == 'approved' else 'pendiente' }}.
+  Los puntos de función se calculan con «Dimensionar backlog» en <a href="/p/{{ project.key }}/agents">Agentes IA</a>.</p>
+{% endblock %}

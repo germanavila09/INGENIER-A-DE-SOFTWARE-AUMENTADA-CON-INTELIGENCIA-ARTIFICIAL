@@ -622,7 +622,7 @@ def start_review(
     review_ids = []
     for story in stories:
         review = StoryReview(project_id=project.id, story_id=story.id, story_version=story.version,
-                             agent_run_id=run.id, status="queued", reasons=[], questions=[])
+                             content_hash=hitl.content_hash(story), agent_run_id=run.id, status="queued", reasons=[], questions=[])
         db.add(review)
         db.flush()
         review_ids.append(review.id)
@@ -657,7 +657,7 @@ def execute_reviews(run_id: int, project_key: str, review_ids: list[int]) -> Non
                 review.status = "running"
                 db.commit()
                 try:
-                    if story.version != review.story_version:
+                    if not hitl.is_current(review, story):
                         raise Conflict(f"La HU {story.code} cambió antes de revisarse (versión {story.version})")
                     out, usage = provider.review_story(hitl.build_input(project, story, context_text))
                     hitl.save_result(review, story, out)

@@ -226,3 +226,35 @@ def test_ui_desarrollador_solo_comenta(demo):
     login(demo, "dev@demo.co")
     page = demo.get("/p/DEMO/revision").text
     assert "Comentar" in page and "Aprobar sin cambios" not in page and "Decide solo el product owner" in page
+
+
+def test_revision_sigue_vigente_si_solo_cambian_estado_prioridad_o_tamano(demo):
+    login(demo, "po@demo.co")
+    demo.post(f"{API}/hitl/review-pending")
+    assert decide(demo, "DEMO-1", "aprobar").status_code == 200
+    v = demo.get(f"{API}/stories/DEMO-1").json()["version"]
+    assert demo.post(f"{API}/stories/DEMO-1/status", json={"status": "lista", "expected_version": v}).status_code == 200
+    d = demo.get(f"{API}/stories/DEMO-1").json()
+    demo.post("/p/DEMO/stories/DEMO-1/edit", data={"title": d["title"], "role_": d["role"] or "", "need": d["need"] or "",
+                                                  "benefit": d["benefit"] or "", "criteria": d["acceptance_criteria"],
+                                                  "priority_rank": "1", "type": "HU_TRADICIONAL"})
+    assert demo.get(f"{API}/stories/DEMO-1").json()["priority_rank"] == 1
+    assert story_hitl(demo, "DEMO-1")["hitl_state"] == "aprobada"
+    demo.post("/p/DEMO/stories/DEMO-1/edit", data={"title": "Otro título para la HU", "type": "HU_TRADICIONAL"})
+    assert story_hitl(demo, "DEMO-1")["hitl_state"] == "desactualizada"
+
+
+def test_vista_estimacion_y_prioridad(demo):
+    login(demo, "po@demo.co")
+    demo.post(f"{API}/hitl/review-pending")
+    page = demo.get("/p/DEMO/estimacion")
+    assert page.status_code == 200 and "fibonacci_tradicional_v1" in page.text and "Puntos de historia" in page.text
+    assert decide(demo, "DEMO-1", "aprobar").status_code == 200
+    res = demo.post("/p/DEMO/estimacion/prioridad", data={"rank_DEMO-1": "2", "rank_DEMO-2": "1",
+                                                          "priority_method": "Valor de negocio"}, follow_redirects=False)
+    assert res.status_code == 303
+    assert demo.get(f"{API}/stories/DEMO-2").json()["priority_rank"] == 1
+    assert story_hitl(demo, "DEMO-1")["hitl_state"] == "aprobada"   # priorizar no invalida la revisión
+    login(demo, "dev@demo.co")
+    demo.post("/p/DEMO/estimacion/prioridad", data={"rank_DEMO-1": "9"})
+    assert demo.get(f"{API}/stories/DEMO-1").json()["priority_rank"] == 2

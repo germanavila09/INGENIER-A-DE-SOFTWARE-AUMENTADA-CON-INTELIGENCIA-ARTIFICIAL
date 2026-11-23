@@ -30,7 +30,7 @@ from app.security import generate_api_key, hash_api_key, hash_password
 from app.services import projects as project_service
 from app.services import stories as story_service
 from app.services import audit
-from app.services import hitl
+from app.services import estimation, hitl
 from app.services import context as context_service
 from app.services.access import Principal, actor_for, load_project, project_role, require_member
 from app.services.documents import SOURCE_LABELS, get_document_source, load_document_text
@@ -668,6 +668,66 @@ def refine_submit(
         db.rollback()
         flash(request, exc.message, "error")
     return redirect(f"/p/{key}/stories/{code}")
+
+
+# ---------- estimación y priorización (etapas 3 y 4) ----------
+
+@router.get("/p/{key}/estimacion")
+def estimation_view(key: str, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    project, role = _project_for(db, key, user)
+    rows = []
+    for s in sorted(project.stories, key=SORTERS["priority"]):
+        if s.status == "descartada":
+            continue
+        st = hitl.state(s)
+        review = st["review"] if st["review"] is not None and st["review"].status == "done" else None
+        if review is None:  # la última terminada, aunque haya una en curso
+            review = next((r for r in sorted(s.reviews, key=lambda r: r.id, reverse=True) if r.status == "done"), None)
+        rows.append({"story": s, "state": st, "review": review, "est": review.estimation if review else None})
+    ests = [r["est"] for r in rows if r["est"]]
+    totals = {
+        "points": sum(e["points"] for e in ests), "spikes": sum(e["spike"]["points"] for e in ests),
+        "estimated": len(ests), "fp": sum(r["story"].function_points or 0 for r in rows),
+        "nfr": sum(r["story"].nfr_points or 0 for r in rows), "count": len(rows),
+        "by_type": {t: sum(1 for e in ests if e["story_type"] == t) for t in estimation.STORY_TYPES},
+    }
+    stages = {x["stage_number"]: x for x in project_service.pipeline_out(db, project)}
+    db.commit()
+    return render(
+        request, "estimation.html", user, project=project, role=role, rows=rows, totals=totals, stages=stages,
+        can_write=_can_write(role, user), weights=estimation.WEIGHTS, factor_help=estimation.FACTOR_HELP,
+        fibonacci=estimation.FIBONACCI, spike_points=estimation.SPIKE_POINTS,
+        methods={estimation.HU_TRADICIONAL: estimation.TRADITIONAL_METHOD, estimation.HU_IA: estimation.IA_METHOD},
+    )
+
+
+@router.post("/p/{key}/estimacion/prioridad")
+async def save_priorities(key: str, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Etapa 4: el product owner o el scrum master fijan el orden. Cambiarlo no invalida la revisión humana."""
+    form = await request.form()
+    try:
+        project, role = _project_for(db, key, user, write=True)
+        if not _can_write(role, user):
+            raise Forbidden("Solo el product owner o el scrum master priorizan")
+        method = _opt(str(form.get("priority_method", ""))) or "Orden del product owner"
+        changed = 0
+        for s in project.stories:
+            raw = form.get(f"rank_{s.code}")
+            if raw is None:
+                continue
+            rank = _int(str(raw))
+            data = {"priority_rank": rank, "priority_method": method if rank is not None else s.priority_method}
+            if story_service.apply_changes(db, project, s, data, _actor(user, role)):
+                changed += 1
+        db.commit()
+        flash(request, f"Prioridad guardada ({changed} HU)" if changed else "Sin cambios de prioridad")
+    except ValueError:
+        db.rollback()
+        flash(request, "La prioridad debe ser un número entero", "error")
+    except AppError as exc:
+        db.rollback()
+        flash(request, exc.message, "error")
+    return redirect(f"/p/{key}/estimacion")
 
 
 # ---------- revisión humana (HITL) ----------

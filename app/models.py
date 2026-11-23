@@ -267,6 +267,10 @@ class StoryReview(Base):
     story_version: Mapped[int] = mapped_column(Integer)
     # Versión resultante cuando una persona aprueba aplicando la propuesta (la revisión sigue vigente).
     applied_version: Mapped[int | None] = mapped_column(Integer)
+    # Huella del contenido revisado (título, rol, necesidad, beneficio, criterios) y del aprobado. La revisión
+    # sigue vigente mientras el contenido no cambie, aunque cambien estado, prioridad, asignación o tamaño.
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    applied_hash: Mapped[str | None] = mapped_column(String(64))
     agent_run_id: Mapped[int | None] = mapped_column(ForeignKey("agent_runs.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(16), default="queued", index=True)  # queued|running|done|failed
     level: Mapped[int | None] = mapped_column(Integer)
