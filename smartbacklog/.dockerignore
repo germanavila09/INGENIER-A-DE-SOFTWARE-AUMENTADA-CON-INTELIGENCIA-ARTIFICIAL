@@ -1,0 +1,28 @@
+# Entorno y secretos (nunca deben viajar al contexto de build)
+.env
+.env.gcp
+.env.local
+.venv/
+.claude/
+
+# Control de versiones y editores
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Caches y artefactos de Python
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.db
+
+# No se copian a la imagen
+tests/
+docs/
+documents/
+*.md
+docker-compose.yml
+Dockerfile
+.dockerignore

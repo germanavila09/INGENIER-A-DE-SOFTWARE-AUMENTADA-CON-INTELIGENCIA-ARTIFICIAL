@@ -1,0 +1,80 @@
+{# Componentes de la revisión humana (HITL). Requiere: project, role, user, hitl (global). #}
+
+{% macro level_badge(level) -%}
+  {% if level is not none %}
+    <span class="badge lvl-{{ level }}" title="{{ hitl.LEVEL_LABELS[level] }}">Nivel {{ level }} · {{ hitl.LEVEL_LABELS[level] }}</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro state_badge(st) -%}
+  <span class="badge hs-{{ st.key }}">{{ st.label }}</span>
+{%- endmacro %}
+
+{% macro who_decides(level) -%}
+  {% if level == 2 %}solo el product owner{% else %}el product owner o el scrum master{% endif %}
+{%- endmacro %}
+
+{# Motivos, preguntas y propuesta de una revisión terminada. #}
+{% macro review_body(review, story, compact=False) -%}
+  {% set stops = review.reasons|selectattr('stop')|list %}
+  {% set notes = review.reasons|rejectattr('stop')|list %}
+  {% if stops %}
+    <ul class="reasons">
+      {% for r in stops %}<li class="stop"><strong>{{ r.description }}</strong> <span class="muted small">· {{ r.agent }}</span></li>{% endfor %}
+    </ul>
+  {% endif %}
+  {% set blocking = review.questions|selectattr('blocking')|list %}
+  {% if blocking %}
+    <div class="questions">
+      <div class="small muted">Preguntas que hay que responder</div>
+      <ol>{% for q in blocking %}<li>{{ q.question }}</li>{% endfor %}</ol>
+    </div>
+  {% endif %}
+  {% if notes and not compact %}
+    <ul class="reasons">
+      {% for r in notes %}<li>{{ r.description }} <span class="muted small">· {{ r.agent }}</span></li>{% endfor %}
+    </ul>
+  {% elif notes %}
+    <p class="small muted">Para revisar: {{ notes|map(attribute='description')|join(' · ') }}</p>
+  {% endif %}
+  {% set changes = hitl.proposal_changes(story, review.proposal) %}
+  {% if changes %}
+    <details class="proposal">
+      <summary>Versión propuesta por el analista ({{ changes|length }} campo{{ 's' if changes|length != 1 }})</summary>
+      {% for field, value in changes.items() %}
+        <div class="diff">
+          <div class="small muted">{{ {'title': 'Título', 'role': 'Rol', 'need': 'Necesidad', 'benefit': 'Beneficio', 'acceptance_criteria': 'Criterios'}[field] }}</div>
+          {% if field == 'acceptance_criteria' %}<div class="markdown">{{ value|md }}</div>{% else %}<p>{{ value }}</p>{% endif %}
+        </div>
+      {% endfor %}
+    </details>
+  {% endif %}
+{%- endmacro %}
+
+{# Formulario de decisión. next = a dónde volver. #}
+{% macro decision_form(story, review, next) -%}
+  {% set can = hitl.can_decide(role, review.level, 'aprobar') %}
+  {% set changes = hitl.proposal_changes(story, review.proposal) %}
+  <form method="post" action="/p/{{ project.key }}/stories/{{ story.code }}/hitl" class="decision">
+    <input type="hidden" name="expected_version" value="{{ story.version }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="c-{{ story.code }}" class="sr-only">Comentario</label>
+    <textarea id="c-{{ story.code }}" name="comment" rows="2"
+      placeholder="{{ 'Comentario, respuesta o cambios que pides (obligatorio para pedir cambios, falta información o descartar)' if can else 'Responde una pregunta o deja un comentario para quien decide' }}"></textarea>
+    <div class="row">
+      {% if can %}
+        {% if changes %}
+          <button class="btn btn-primary btn-sm" name="decision" value="aprobar_propuesta" type="submit">Aprobar con la propuesta</button>
+          <button class="btn btn-sm" name="decision" value="aprobar" type="submit">Aprobar sin cambios</button>
+        {% else %}
+          <button class="btn btn-primary btn-sm" name="decision" value="aprobar" type="submit">Aprobar</button>
+        {% endif %}
+        <button class="btn btn-sm" name="decision" value="pedir_cambios" type="submit" title="El agente refina la HU con tu comentario y la vuelve a revisar">Pedir cambios</button>
+        <button class="btn btn-sm" name="decision" value="falta_info" type="submit" title="Deja la pregunta para el equipo; la HU sigue esperando">Falta información</button>
+        <button class="btn btn-sm btn-danger" name="decision" value="descartar" type="submit">Descartar</button>
+      {% endif %}
+      <button class="btn btn-sm btn-ghost" name="decision" value="comentario" type="submit">Comentar</button>
+      {% if not can %}<span class="small muted">Decide {{ who_decides(review.level) }}.</span>{% endif %}
+    </div>
+  </form>
+{%- endmacro %}

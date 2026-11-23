@@ -16,7 +16,8 @@ Proyecto base que consume el bucket de Cloud Storage **`gs://adk_ing`** (proyect
 │   └── agente_bucket/      # agente de preguntas sobre documentos
 ├── docs/ARQUITECTURA.md    # arquitectura multiagente, diagramas Mermaid, HITL, estados
 ├── ejemplos/projects/      # proyectos de ejemplo: PRJ001 (dengue), PRJ002, proyecto sin project.yaml
-├── docs_ejemplo/           # documentos ficticios para agente_bucket
+├── docs_ejemplo/           # documentos ficticios para agente_bucket y la demo de SmartBacklogIA
+├── smartbacklog/           # SmartBacklogIA: backlog con revisión humana (HITL), 5 etapas, estimación
 ├── src/hu_multiagent/      # código del sistema multiagente
 │   ├── agents/             # orchestrator, project_discovery, ingestion, story_analyst,
 │   │                       # architecture, qa, aggregator, hitl_evaluator (agent.py + prompt.py)
@@ -190,7 +191,31 @@ Subir requiere `roles/storage.objectCreator`; el agente solo necesita lectura.
 
 > **Repo dentro de Google Drive:** crea el entorno virtual fuera de la carpeta sincronizada (o usa el Python global) y pon `ADK_SESSION_URI=memory://` en el `.env`, para que Drive no intente sincronizar miles de archivos ni la base SQLite de sesiones.
 
-## Integración con SmartBacklogIA
+## SmartBacklogIA local con revisión humana (`smartbacklog/`)
+
+La forma recomendada de probar el flujo completo. [SmartBacklogIA](https://github.com/diegodgt02-ai/SmartBacklogIA)
+vive en `smartbacklog/` como componente, con un solo login, roles por proyecto y su base de datos, y el motor
+multiagente de este repositorio como revisión de cada historia:
+
+- **Revisión humana (HITL) como función central:** analista → arquitectura ∥ QA ∥ estimación revisan cada HU; una
+  política en código le asigna nivel 0/1/2; el nivel 2 solo lo decide el product owner y los niveles 1 y 0 el
+  product owner o el scrum master. Decisiones: aprobar (con o sin la propuesta), pedir cambios, falta
+  información, descartar, comentar. Nada se aprueba solo.
+- **Cinco etapas:** generación desde documentos, clasificación HU-IA / HU-Tradicional, estimación (puntos de
+  historia por factores junto a puntos de función IFPUG), priorización y backlog final.
+- **Local, sin GCP:** Postgres en Docker, documentos en una carpeta y Gemini con API key.
+
+En Windows, con Docker Desktop y una API key de [AI Studio](https://aistudio.google.com/apikey):
+
+```powershell
+cd smartbacklog\windows
+.\INICIAR.cmd
+```
+
+Guía para probadores, usuarios de prueba y demo con `docs_ejemplo`: [smartbacklog/windows/LEEME.md](smartbacklog/windows/LEEME.md).
+Detalle técnico: [smartbacklog/README.md](smartbacklog/README.md).
+
+## Integración con SmartBacklogIA (versión anterior, por API)
 
 `python adk_web.py` abre **Ruta de historias** (`/flujo`): una sola interfaz para documentos, análisis
 multiagente, revisión humana, estimación, priorización y publicación en
@@ -202,7 +227,7 @@ Detalle en [docs/integracion_smartbacklog.md](docs/integracion_smartbacklog.md).
 ## Despliegue para pruebas con otras personas
 
 `deploy\desplegar_gcp.ps1` publica Ruta de historias y SmartBacklogIA en Cloud Run (`servi-modelos-ia-dev`), con
-usuario y clave por tester (o cuentas de Google con IAP). Detalle, costos y cómo pausar en [deploy/README.md](deploy/README.md).
+usuario y clave por tester. Detalle, costos y cómo pausar en [deploy/README.md](deploy/README.md).
 
 ## Pruebas
 

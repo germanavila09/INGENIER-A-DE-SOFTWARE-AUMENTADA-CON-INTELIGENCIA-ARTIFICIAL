@@ -17,26 +17,28 @@ function G { & gcloud @args --project=$Proyecto --quiet; if ($LASTEXITCODE -ne 0
 
 switch ($Accion) {
     "pausar" {
-        G sql instances patch spb-pg --activation-policy=NEVER
+        G sql instances patch spb-psc --activation-policy=NEVER
         Write-Host "Cloud SQL apagado. SmartBacklogIA no funcionará hasta reanudar; Ruta de historias sigue disponible (sin publicar)."
     }
     "reanudar" {
-        G sql instances patch spb-pg --activation-policy=ALWAYS
+        G sql instances patch spb-psc --activation-policy=ALWAYS
         Write-Host "Cloud SQL encendido."
     }
     "eliminar" {
-        Write-Host "Se borrarán: servicios hu-flujo y smartbacklog, job smartbacklog-seed, Cloud SQL spb-pg (con TODOS los datos"
+        Write-Host "Se borrarán: servicios hu-flujo y smartbacklog, job smartbacklog-seed, Cloud SQL spb-psc (con TODOS los datos"
         Write-Host "de SmartBacklogIA), los secretos y el repositorio de imágenes ruta-historias." -ForegroundColor Yellow
         Write-Host "No se tocan el bucket adk_ing ni los resultados en gs://adk_ing/salidas_hu/."
         if ((Read-Host "Escribe ELIMINAR para continuar") -ne "ELIMINAR") { Write-Host "Cancelado."; exit 1 }
         G run services delete hu-flujo --region=$Region
         G run services delete smartbacklog --region=$Region
         G run jobs delete smartbacklog-seed --region=$Region
-        G sql instances delete spb-pg
+        G sql instances delete spb-psc
+        G compute forwarding-rules delete ruta-sql-psc --region=$Region
+        G compute addresses delete ruta-sql-psc --region=$Region
         foreach ($s in @("hu-usuarios", "sbia-api-key", "sbia-admin-password", "sbia-session-secret", "sbia-database-url")) {
             G secrets delete $s
         }
         G artifacts repositories delete ruta-historias --location=$Region
-        Write-Host "Listo. Las cuentas de servicio sa-hu-flujo y sa-smartbacklog se conservan (no cuestan)."
+        Write-Host "Listo. El bucket y la cuenta de Compute no se tocan."
     }
 }

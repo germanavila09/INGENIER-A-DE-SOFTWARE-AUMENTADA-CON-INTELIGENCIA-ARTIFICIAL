@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" id="def-pago">
+  <process id="proceso-pago" name="Pago con tarjeta en checkout">
+    <laneSet id="lanes">
+      <lane id="lane-cliente" name="Cliente">
+        <flowNodeRef>t-ingresar</flowNodeRef>
+        <flowNodeRef>t-ver-error</flowNodeRef>
+      </lane>
+      <lane id="lane-pasarela" name="Pasarela de pagos">
+        <flowNodeRef>t-validar</flowNodeRef>
+        <flowNodeRef>t-autorizar</flowNodeRef>
+      </lane>
+    </laneSet>
+    <startEvent id="inicio" name="Inicia checkout"/>
+    <userTask id="t-ingresar" name="Ingresar datos de la tarjeta">
+      <documentation>El cliente digita número, vencimiento y CVV. Los campos se validan en el formulario.</documentation>
+    </userTask>
+    <serviceTask id="t-validar" name="Validar tarjeta con la pasarela">
+      <documentation>Se verifica formato, BIN y estado de la tarjeta antes de autorizar.</documentation>
+    </serviceTask>
+    <exclusiveGateway id="g-aprobada" name="¿Tarjeta aprobada?"/>
+    <serviceTask id="t-autorizar" name="Autorizar cobro"/>
+    <userTask id="t-ver-error" name="Mostrar error de rechazo">
+      <documentation>Mensaje claro y opción de reintentar hasta tres veces.</documentation>
+    </userTask>
+    <endEvent id="fin-ok" name="Pago confirmado"/>
+    <sequenceFlow id="f1" sourceRef="inicio" targetRef="t-ingresar"/>
+    <sequenceFlow id="f2" sourceRef="t-ingresar" targetRef="t-validar"/>
+    <sequenceFlow id="f3" sourceRef="t-validar" targetRef="g-aprobada"/>
+    <sequenceFlow id="f4" sourceRef="g-aprobada" targetRef="t-autorizar" name="Sí"/>
+    <sequenceFlow id="f5" sourceRef="g-aprobada" targetRef="t-ver-error" name="No"/>
+    <sequenceFlow id="f6" sourceRef="t-autorizar" targetRef="fin-ok"/>
+  </process>
+</definitions>

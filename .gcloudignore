@@ -10,3 +10,4 @@ docs_ejemplo
 *.pdf
 *.xlsx
 deploy/credenciales_pruebas.csv
+deploy/estado_despliegue.json

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Error {{ code }}{% endblock %}
+{% block anon %}
+<div class="auth-wrap">
+  <div class="card auth-card" style="text-align:center">
+    <div class="muted small">Error {{ code }}</div>
+    <h1 style="margin:8px 0 10px">{{ message }}</h1>
+    <a class="btn btn-primary" href="/projects">Volver a proyectos</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ project.key }} · Tablero{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Tablero</h1>
+    <p class="muted">Arrastra una HU para cambiar su estado. Las transiciones se validan según tu rol.
+      {% if discarded %}<span class="small">({{ discarded }} descartada{{ 's' if discarded > 1 }} fuera del tablero)</span>{% endif %}</p>
+  </div>
+</div>
+
+<div class="board" data-kanban data-project="{{ project.key }}" data-readonly="{{ 'false' if can_write else 'true' }}">
+  {% for col in columns %}
+  <div class="column">
+    <div class="column-head">
+      <span class="badge st-{{ col.status }}">{{ col.label }}</span>
+      <span class="count">{{ col.stories|length }}</span>
+    </div>
+    <div class="column-body" data-status="{{ col.status }}">
+      {% for s in col.stories %}
+      <article class="k-card" data-code="{{ s.code }}" data-version="{{ s.version }}">
+        <a class="title" href="/p/{{ project.key }}/stories/{{ s.code }}">{{ s.title }}</a>
+        <div class="meta">
+          <span class="code">{{ s.code }}</span>
+          {{ m.type_badge(s.type) }}
+        </div>
+        <div class="meta">
+          {{ m.fp(s.function_points) }}
+          <span class="spacer"></span>
+          {% if s.assignee %}{{ m.initials(s.assignee.name) }}{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

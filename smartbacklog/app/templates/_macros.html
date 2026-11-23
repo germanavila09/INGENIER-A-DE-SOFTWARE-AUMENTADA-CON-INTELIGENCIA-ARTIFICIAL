@@ -1,0 +1,19 @@
+{% macro status_badge(status) -%}
+  <span class="badge st-{{ status }}">{{ status_labels[status] }}</span>
+{%- endmacro %}
+
+{% macro type_badge(t) -%}
+  {% if t %}
+    <span class="badge type-{{ t }}">{{ type_labels[t] }}</span>
+  {% else %}
+    <span class="badge none">Sin tipo</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro fp(p) -%}
+  {% if p is not none %}<span class="mono" title="Puntos de función IFPUG sin ajustar">{{ '%g'|format(p) }} FP</span>{% else %}<span class="muted" title="Sin dimensionar">—</span>{% endif %}
+{%- endmacro %}
+
+{% macro initials(name) -%}
+  <span class="avatar" title="{{ name }}">{{ name[:1]|upper }}</span>
+{%- endmacro %}

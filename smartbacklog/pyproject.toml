@@ -1,0 +1,9 @@
+[project]
+name = "smart-product-backlog"
+version = "0.1.0"
+description = "MVP Smart Product Backlog: gestión de HU, roles, HITL y API para agentes ADK"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

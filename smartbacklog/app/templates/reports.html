@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ project.key }} · Reportes{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Reportes</h1>
+    <p class="muted">Resumen del backlog y exportación para Jira, Trello u hojas de cálculo.</p>
+  </div>
+  <span class="spacer"></span>
+  <a class="btn" href="/api/v1/projects/{{ project.key }}/export?format=csv">Exportar CSV</a>
+  <a class="btn btn-primary" href="/api/v1/projects/{{ project.key }}/export?format=json">Exportar JSON</a>
+</div>
+
+<div class="grid grid-4" style="margin-bottom:16px">
+  <div class="card kpi"><div class="label">Total HU</div><div class="value">{{ summary.total_stories }}</div></div>
+  <div class="card kpi"><div class="label">Puntos de función</div><div class="value">{{ '%g'|format(summary.total_function_points) }}</div>
+    <div class="small muted">Sin dimensionar: {{ summary.unsized_stories }} · NFR: {{ '%g'|format(summary.total_nfr_points) }}</div></div>
+  <div class="card kpi"><div class="label">Completado</div><div class="value">{{ summary.completion_pct }}%</div></div>
+  <div class="card kpi"><div class="label">HU-IA</div><div class="value">{{ summary.by_type.get('HU_IA', {'count': 0}).count }}</div>
+    <div class="small muted">Tradicionales: {{ summary.by_type.get('HU_TRADICIONAL', {'count': 0}).count }}</div></div>
+</div>
+
+<div class="grid grid-2" style="margin-bottom:16px">
+  <section class="card">
+    <div class="card-head"><h2>Por estado</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Estado</th><th class="num">HU</th><th class="num">FP</th></tr></thead>
+      <tbody>
+      {% for code, v in summary.by_status.items() %}
+        <tr><td><span class="badge st-{{ code }}">{{ v.label }}</span></td><td class="num">{{ v.count }}</td><td class="num">{{ '%g'|format(v.function_points) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Por asignado</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Persona</th><th class="num">HU</th><th class="num">FP</th></tr></thead>
+      <tbody>
+      {% for name, v in summary.by_assignee.items() %}
+        <tr><td>{{ name }}</td><td class="num">{{ v.count }}</td><td class="num">{{ '%g'|format(v.function_points) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+</div>
+
+<section class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2>Por épica</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Épica</th><th class="num">HU</th><th class="num">FP</th></tr></thead>
+    <tbody>
+    {% for name, v in summary.by_epic.items() %}
+      <tr><td>{{ name }}</td><td class="num">{{ v.count }}</td><td class="num">{{ '%g'|format(v.function_points) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+{% set ctx = context %}
+<section class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2>Grafo de contexto (funcionalidades, entidades y restricciones)</h2><span class="spacer"></span>
+    <a class="btn btn-sm" href="/api/v1/projects/{{ project.key }}/context">JSON</a></div>
+  <p class="small muted" style="margin:0 0 10px">Lo propone el agente arquitecto desde los documentos del proyecto; una persona lo revisa y lo aprueba. El dimensionamiento usa solo la versión aprobada. Para editar el borrador: <span class="mono">PUT /api/v1/projects/{{ project.key }}/context/draft</span>.</p>
+  <div class="grid grid-2" style="margin-bottom:10px">
+    {% for label, g in [('Aprobado (en uso)', ctx.approved), ('Borrador por revisar', ctx.draft)] %}
+    <div class="card kpi"><div class="label">{{ label }}</div>
+      {% if g %}<div class="value">v{{ g.version }}</div><div class="small muted">{{ g.summary.feature }} funcionalidades · {{ g.summary.entity }} entidades · {{ g.summary.constraint }} restricciones · por {{ g.created_by }}{% if g.reviewed_by %} · aprobó {{ g.reviewed_by }}{% endif %}</div>
+      {% else %}<div class="value">—</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% set shown = ctx.draft or ctx.approved %}
+  {% if shown %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Restricción (v{{ shown.version }})</th><th>Categoría</th><th>Severidad</th><th>Regla</th></tr></thead>
+    <tbody>
+    {% for n in shown.nodes if n.kind == 'constraint' %}
+      <tr><td class="mono small">{{ n.id }}</td><td>{{ n.category }}</td><td>{{ n.severity }}</td><td class="small">{{ n.rule }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted small">Sin restricciones.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+  {% if can_write %}
+  <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+    <form method="post" action="/p/{{ project.key }}/agents/extract-context"><button class="btn" type="submit" {{ 'disabled' if not agent_status.configured }}>Extraer grafo con agente</button></form>
+    {% if ctx.draft %}
+    <form method="post" action="/p/{{ project.key }}/context/approve" class="row"><input name="notes" placeholder="Notas de revisión"><button class="btn btn-primary" type="submit">Aprobar v{{ ctx.draft.version }}</button></form>
+    <form method="post" action="/p/{{ project.key }}/context/reject"><button class="btn" type="submit">Rechazar</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if summary.open_violations %}
+  <h3 style="margin:14px 0 6px;color:var(--danger)">Restricciones violadas sin resolver ({{ summary.open_violations|length }}): bloquean la etapa 3</h3>
+  <ul class="small" style="margin:0;padding-left:18px">
+    {% for v in summary.open_violations %}<li><a href="/p/{{ project.key }}/stories/{{ v.story }}" class="mono">{{ v.story }}</a> · {{ v.name }} ({{ v.severity }}): {{ v.reason }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+{% set f = finops %}
+<section class="card" style="margin-bottom:16px">
+  <div class="card-head">
+    <h2>FinOps · generación autónoma</h2><span class="spacer"></span>
+    <a class="btn btn-sm" href="/api/v1/projects/{{ project.key }}/finops/export?format=csv">CSV</a>
+    <a class="btn btn-sm" href="/api/v1/projects/{{ project.key }}/finops">JSON</a>
+  </div>
+  <p class="small muted" style="margin:0 0 10px">Modelo <strong>{{ f.model.label }}</strong> · escenario {{ f.scenario }} · precios al {{ f.prices.as_of }} (USD/1M: entrada {{ f.prices.input }}, salida {{ f.prices.output }}, caché {{ f.prices.cache_read }}).
+    Supuestos por defecto del método <span class="mono">{{ f.method }}</span>; otro modelo o supuestos con parámetros en <span class="mono">GET /api/v1/projects/{{ project.key }}/finops</span>.</p>
+  <div class="grid grid-4" style="margin-bottom:12px">
+    <div class="card kpi"><div class="label">Costo esperado</div><div class="value">${{ '%.2f'|format(f.totals.cost_usd) }}</div>
+      <div class="small muted">bajo ${{ '%.2f'|format(f.scenarios.low.cost_usd) }} · alto ${{ '%.2f'|format(f.scenarios.high.cost_usd) }} · PERT ${{ '%.2f'|format(f.scenarios.pert.cost_usd) }}</div></div>
+    <div class="card kpi"><div class="label">Impuesto de contexto</div><div class="value">{{ f.totals.context_tax_pct }}%</div>
+      <div class="small muted">${{ '%.2f'|format(f.totals.context_tax_usd) }} por el repositorio acumulado</div></div>
+    <div class="card kpi"><div class="label">Contexto final</div><div class="value">{{ '{:,}'.format(f.totals.final_context_tokens) }}</div>
+      <div class="small muted">tokens de repositorio</div></div>
+    <div class="card kpi"><div class="label">Tiempo de reloj</div><div class="value">{{ '%.1f'|format(f.totals.hours) }} h</div>
+      <div class="small muted">bajo {{ '%.1f'|format(f.scenarios.low.hours) }} · alto {{ '%.1f'|format(f.scenarios.high.hours) }} h</div></div>
+  </div>
+  {% for w in f.warnings %}<p class="small" style="color:var(--danger);margin:0 0 6px">{{ w }}</p>{% endfor %}
+  <div class="table-wrap"><table>
+    <thead><tr><th class="num">#</th><th>HU</th><th class="num">FP</th><th class="num">NFR</th><th class="num">Contexto previo</th><th class="num">Iter.</th>
+      <th class="num">Entrada</th><th class="num">Caché</th><th class="num">Salida</th><th class="num">USD</th><th class="num">Impuesto</th><th class="num">Horas</th></tr></thead>
+    <tbody>
+    {% for r in f.stories %}
+      <tr>
+        <td class="num">{{ r.order }}</td>
+        <td><a href="/p/{{ project.key }}/stories/{{ r.code }}" class="mono">{{ r.code }}</a> <span class="small">{{ r.title }}</span></td>
+        {% if r.sized %}
+        <td class="num">{{ '%g'|format(r.function_points) }}</td>
+        <td class="num">{{ '%g'|format(r.nfr_points) }}</td>
+        <td class="num">{{ '{:,}'.format(r.context_before_tokens) }}</td>
+        <td class="num">{{ r.iterations }}</td>
+        <td class="num">{{ '{:,}'.format(r.input_tokens) }}</td>
+        <td class="num">{{ '{:,}'.format(r.cache_read_tokens) }}</td>
+        <td class="num">{{ '{:,}'.format(r.output_tokens) }}</td>
+        <td class="num">{{ '%.2f'|format(r.cost_usd) }}</td>
+        <td class="num">{{ '%.2f'|format(r.context_tax_usd) }}</td>
+        <td class="num">{{ '%.2f'|format(r.hours) }}{% if r.exceeds_window %} <span class="badge none" title="Contexto acotado a la ventana del modelo">ventana</span>{% endif %}</td>
+        {% else %}
+        <td colspan="10" class="muted small">Sin dimensionar: no se costea</td>
+        {% endif %}
+      </tr>
+    {% else %}
+      <tr><td colspan="12" class="muted">Sin HU activas.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% if can_write %}
+  <form method="post" action="/p/{{ project.key }}/agents/size-backlog" class="row" style="margin-top:12px">
+    <button class="btn btn-primary" type="submit" {{ 'disabled' if not agent_status.configured }}>Dimensionar HU pendientes con agente</button>
+    <label class="small"><input type="checkbox" name="resize" value="1"> recalcular también las ya dimensionadas</label>
+    {% if not agent_status.configured %}<span class="small muted">Agente no configurado: {{ agent_status.reason }}</span>{% endif %}
+  </form>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Validación HITL del pipeline</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Etapa</th><th>Estado</th><th>Validó</th><th>Cuándo</th><th>Cambios</th></tr></thead>
+    <tbody>
+    {% for s in summary.pipeline %}
+      <tr>
+        <td>{{ s.stage_number }}. {{ s.name }}</td>
+        <td>{% if s.status == 'approved' %}<span class="badge ok">Aprobada</span>{% else %}<span class="badge pending">Pendiente</span>{% endif %}</td>
+        <td>{{ s.approved_by or '—' }}</td>
+        <td class="small">{{ s.approved_at[:16].replace('T', ' ') if s.approved_at else '—' }}</td>
+        <td class="small muted">{{ s.change_summary or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}
